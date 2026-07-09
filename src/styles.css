@@ -200,8 +200,6 @@
     inset -1px -1px 0 0 var(--tibia-border-dark);
   cursor: pointer;
   text-align: center;
-}
-@utility tibia-btn {
   &:hover { filter: brightness(1.15); }
   &:active {
     box-shadow:
@@ -209,6 +207,7 @@
       inset -1px -1px 0 0 var(--tibia-border-light);
   }
 }
+
 
 @utility tibia-tab {
   background: linear-gradient(180deg, #555 0%, #333 100%);
