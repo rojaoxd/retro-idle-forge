@@ -30,7 +30,7 @@ export const listMapTiles = createServerFn({ method: "GET" })
     await assertAdmin(context);
     const { data: tiles, error } = await context.supabase
       .from("map_tiles")
-      .select("id, x, y, layer, tile_id, blocking");
+      .select("id, x, y, layer, tile_id, blocking, spawn_monster_id");
     if (error) throw new Error(error.message);
 
     const spriteIds = Array.from(new Set((tiles ?? []).map((t: any) => t.tile_id)));
@@ -47,7 +47,12 @@ export const listMapTiles = createServerFn({ method: "GET" })
       context.supabase,
       sprites.map((s) => s.sheet_url),
     );
-    return { tiles: tiles ?? [], sprites, urlMap };
+
+    const { data: monsters } = await context.supabase
+      .from("monsters")
+      .select("id, name");
+
+    return { tiles: tiles ?? [], sprites, urlMap, monsters: monsters ?? [] };
   });
 
 export const upsertMapTile = createServerFn({ method: "POST" })
@@ -57,9 +62,10 @@ export const upsertMapTile = createServerFn({ method: "POST" })
       .object({
         x: z.number().int(),
         y: z.number().int(),
-        layer: z.enum(["floor", "obstacles"]),
+        layer: z.enum(["floor", "obstacles", "spawn"]),
         tile_id: z.number().int(),
         blocking: z.boolean().default(false),
+        spawn_monster_id: z.string().uuid().nullable().optional(),
       })
       .parse(raw),
   )
@@ -79,7 +85,7 @@ export const deleteMapTile = createServerFn({ method: "POST" })
       .object({
         x: z.number().int(),
         y: z.number().int(),
-        layer: z.enum(["floor", "obstacles"]),
+        layer: z.enum(["floor", "obstacles", "spawn"]),
       })
       .parse(raw),
   )

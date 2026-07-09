@@ -74,6 +74,7 @@ export type Database = {
           is_solid: boolean
           is_stackable: boolean
           is_useable: boolean
+          item_type: string
           name: string
           sprite_id: number | null
           updated_at: string
@@ -94,6 +95,7 @@ export type Database = {
           is_solid?: boolean
           is_stackable?: boolean
           is_useable?: boolean
+          item_type?: string
           name: string
           sprite_id?: number | null
           updated_at?: string
@@ -114,6 +116,7 @@ export type Database = {
           is_solid?: boolean
           is_stackable?: boolean
           is_useable?: boolean
+          item_type?: string
           name?: string
           sprite_id?: number | null
           updated_at?: string
@@ -202,6 +205,7 @@ export type Database = {
           created_at: string
           id: string
           layer: string
+          spawn_monster_id: string | null
           tile_id: number
           updated_at: string
           x: number
@@ -212,6 +216,7 @@ export type Database = {
           created_at?: string
           id?: string
           layer: string
+          spawn_monster_id?: string | null
           tile_id: number
           updated_at?: string
           x: number
@@ -222,12 +227,20 @@ export type Database = {
           created_at?: string
           id?: string
           layer?: string
+          spawn_monster_id?: string | null
           tile_id?: number
           updated_at?: string
           x?: number
           y?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "map_tiles_spawn_monster_id_fkey"
+            columns: ["spawn_monster_id"]
+            isOneToOne: false
+            referencedRelation: "monsters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "map_tiles_tile_id_fkey"
             columns: ["tile_id"]
@@ -236,6 +249,83 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      monsters: {
+        Row: {
+          created_at: string
+          exp_reward: number
+          hp: number
+          id: string
+          loot_table: Json
+          max_damage: number
+          name: string
+          speed: number
+          sprite_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          exp_reward?: number
+          hp?: number
+          id?: string
+          loot_table?: Json
+          max_damage?: number
+          name: string
+          speed?: number
+          sprite_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          exp_reward?: number
+          hp?: number
+          id?: string
+          loot_table?: Json
+          max_damage?: number
+          name?: string
+          speed?: number
+          sprite_id?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monsters_sprite_id_fkey"
+            columns: ["sprite_id"]
+            isOneToOne: false
+            referencedRelation: "game_sprites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      online_players: {
+        Row: {
+          character_name: string
+          created_at: string
+          id: string
+          last_heartbeat: string
+          user_id: string
+          x: number
+          y: number
+        }
+        Insert: {
+          character_name: string
+          created_at?: string
+          id?: string
+          last_heartbeat?: string
+          user_id: string
+          x?: number
+          y?: number
+        }
+        Update: {
+          character_name?: string
+          created_at?: string
+          id?: string
+          last_heartbeat?: string
+          user_id?: string
+          x?: number
+          y?: number
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -258,6 +348,111 @@ export type Database = {
         }
         Relationships: []
       }
+      server_configs: {
+        Row: {
+          id: number
+          motd: string | null
+          status: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: number
+          motd?: string | null
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: number
+          motd?: string | null
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      server_logs: {
+        Row: {
+          created_at: string
+          id: string
+          level: string
+          message: string
+          meta: Json
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          level?: string
+          message: string
+          meta?: Json
+          source?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          level?: string
+          message?: string
+          meta?: Json
+          source?: string
+        }
+        Relationships: []
+      }
+      spells: {
+        Row: {
+          created_at: string
+          effect_id: string | null
+          id: string
+          kind: string
+          mana_cost: number
+          min_level: number
+          name: string
+          updated_at: string
+          vocation_id: string | null
+          words: string
+        }
+        Insert: {
+          created_at?: string
+          effect_id?: string | null
+          id?: string
+          kind?: string
+          mana_cost?: number
+          min_level?: number
+          name: string
+          updated_at?: string
+          vocation_id?: string | null
+          words: string
+        }
+        Update: {
+          created_at?: string
+          effect_id?: string | null
+          id?: string
+          kind?: string
+          mana_cost?: number
+          min_level?: number
+          name?: string
+          updated_at?: string
+          vocation_id?: string | null
+          words?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spells_effect_id_fkey"
+            columns: ["effect_id"]
+            isOneToOne: false
+            referencedRelation: "game_visual_effects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spells_vocation_id_fkey"
+            columns: ["vocation_id"]
+            isOneToOne: false
+            referencedRelation: "vocations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -276,6 +471,42 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      vocations: {
+        Row: {
+          capacity_per_level: number
+          created_at: string
+          hp_per_level: number
+          hp_regen_ms: number
+          id: string
+          mana_per_level: number
+          mana_regen_ms: number
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          capacity_per_level?: number
+          created_at?: string
+          hp_per_level?: number
+          hp_regen_ms?: number
+          id?: string
+          mana_per_level?: number
+          mana_regen_ms?: number
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          capacity_per_level?: number
+          created_at?: string
+          hp_per_level?: number
+          hp_regen_ms?: number
+          id?: string
+          mana_per_level?: number
+          mana_regen_ms?: number
+          name?: string
+          updated_at?: string
         }
         Relationships: []
       }

@@ -17,6 +17,7 @@ export const Route = createFileRoute("/dev/items")({
 type Item = {
   id?: string;
   name: string;
+  item_type: "weapon" | "armor" | "rune" | "fluid" | "misc";
   sprite_id: number | null;
   weight: number;
   capacity: number;
@@ -35,6 +36,7 @@ type Item = {
 
 const empty: Item = {
   name: "",
+  item_type: "misc",
   sprite_id: null,
   weight: 0,
   capacity: 0,
@@ -49,6 +51,14 @@ const empty: Item = {
   is_liquid_container: false,
   has_height: false,
   extra: {},
+};
+
+const TYPE_LABELS: Record<Item["item_type"], string> = {
+  weapon: "Arma",
+  armor: "Armadura",
+  rune: "Runa",
+  fluid: "Fluido",
+  misc: "Outro",
 };
 
 function ItemsPage() {
@@ -113,7 +123,9 @@ function ItemsPage() {
                 }}
               >
                 <span className="flex-1 truncate">{r.name}</span>
-                {r.sprite_id && <span className="text-[10px] text-slate-500">#{r.sprite_id}</span>}
+                <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[9px] uppercase text-slate-400">
+                  {TYPE_LABELS[(r.item_type ?? "misc") as Item["item_type"]]}
+                </span>
               </button>
             ))}
             {filtered.length === 0 && (
@@ -164,11 +176,24 @@ function ItemForm({
 
   return (
     <div className="dev-panel space-y-6 p-6">
-      <div className="grid gap-4 md:grid-cols-[auto_1fr]">
+      <div className="grid gap-4 md:grid-cols-[auto_1fr_200px]">
         <SpritePicker value={v.sprite_id} onChange={(id) => set("sprite_id", id)} label="Sprite ID" />
         <div className="space-y-2">
           <label className="block text-xs uppercase text-slate-400">Nome do Item</label>
           <Input value={v.name} onChange={(e) => set("name", e.target.value)} placeholder="ex.: Sword" />
+        </div>
+        <div className="space-y-2">
+          <label className="block text-xs uppercase text-slate-400">Tipo</label>
+          <Select value={v.item_type} onValueChange={(val) => set("item_type", val as any)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="weapon">Arma</SelectItem>
+              <SelectItem value="armor">Armadura</SelectItem>
+              <SelectItem value="rune">Runa</SelectItem>
+              <SelectItem value="fluid">Fluido</SelectItem>
+              <SelectItem value="misc">Outro</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
