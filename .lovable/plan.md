@@ -1,133 +1,115 @@
-# Integração Colyseus + Phaser 3
+## Painel de Desenvolvedor `/dev` — MMORPG Engine (Tibia 7.4)
 
-Conectar o cliente ao servidor Colyseus real, renderizar o mundo com Phaser 3 e sincronizar posições de jogadores em tempo real.
+Painel admin completo com 5 módulos CRUD, sidebar dark mode profissional (slate/emerald), gated por role `admin` via Supabase.
 
-## 1. Dependências
+### 1. Autenticação e autorização
 
-```bash
-bun add colyseus.js phaser
+- Migration cria enum `app_role` (`admin`, `moderator`, `user`), tabela `user_roles`, função `has_role(_user_id, _role)` security definer.
+- Layout `src/routes/_authenticated/_admin.tsx` (pathless): `beforeLoad` chama server fn que valida `has_role(auth.uid(), 'admin')`; sem admin → `redirect /`.
+- Todas as rotas `/dev/*` ficam sob `_authenticated/_admin/dev.*`.
+- Primeiro admin: script SQL manual no fim da migration (usuário informa email depois OU seedamos por email fixo — ver "Detalhes técnicos").
+
+### 2. Schema Supabase (uma migration)
+
+```
+game_sprites(id serial, tags text[], sheet_url text, x int, y int, width int default 32, height int default 32, created_at)
+game_items(id uuid, name, sprite_id int → game_sprites, weight numeric, capacity int,
+           attack int, defense int, armor int, weapon_type text,
+           is_solid bool, is_container bool, is_stackable bool, is_useable bool,
+           is_liquid_container bool, has_height bool, extra jsonb)
+game_creatures(id uuid, look_id int unique, name text,
+               animations jsonb  -- { north:{idle,step1,step2}, south:{...}, east:{...}, west:{...} } com sprite_ids)
+game_visual_effects(id uuid, name text, kind text CHECK ('missile'|'effect'),
+                    frames jsonb -- [sprite_id,...] (missile: por direção),
+                    frame_rate_ms int)
+game_config(id int primary key default 1, config jsonb, updated_at)  -- singleton
 ```
 
-- `colyseus.js` — SDK oficial do cliente (nome correto do pacote; `@colyseus/sdk` não existe no npm).
-- `phaser` — engine 2D com loader nativo de tilemaps Tiled.
+- GRANTs `authenticated`/`service_role` em todas; RLS ativa.
+- Policies: SELECT/INSERT/UPDATE/DELETE somente para `has_role(auth.uid(), 'admin')`.
+- Trigger `updated_at`.
+- Storage bucket `game-sprites` (público) para folhas originais; `game_sprites` guarda só metadados (sheet_url + x,y) — sem gerar PNGs por slice, conforme escolhido.
 
-## 2. Serviço de rede — `src/net/colyseus.ts`
+### 3. Estrutura de rotas
 
-Singleton que expõe o `Client` e a `Room` conectada:
-
-```ts
-import { Client, Room } from "colyseus.js";
-
-const ENDPOINT = "ws://54.233.23.67:2567";
-export const client = new Client(ENDPOINT);
-
-export async function joinGameRoom(name: string): Promise<Room> {
-  return client.joinOrCreate("game", { name });
-}
+```
+src/routes/
+  _authenticated/_admin/
+    dev.tsx                 → layout com <DevSidebar/> + <Outlet/>
+    dev.index.tsx           → redirect para /dev/sprites
+    dev.sprites.tsx
+    dev.items.tsx
+    dev.creatures.tsx
+    dev.spells.tsx
+    dev.config.tsx
 ```
 
-- Conexão automática ao montar o `TibiaShell` via `useEffect`, usando `character.name` do `tibiaStore`.
-- Guarda a `room` em um novo store `netStore` (Zustand) e expõe `send(type, payload)`.
-- Reconecta ao desmontar (`room.leave()` no cleanup).
-- Atualiza `server.latency` no `tibiaStore` a partir de pings periódicos (`room.send("ping")` opcional; se o servidor não suportar, usa `Date.now()` no round-trip do próximo `move`).
+### 4. Design system
 
-## 3. Renderizador Phaser — `src/components/tibia/PhaserCanvas.tsx`
+- Dark mode: fundo `slate-950`, superfícies `slate-900/800`, bordas `slate-700`, texto `slate-100/400`.
+- Accent primário: `emerald-500` (sucesso/salvar), accent secundário `sky-500` (ações).
+- Tokens novos em `src/styles.css` (`--dev-bg`, `--dev-surface`, `--dev-accent`, `--dev-accent-2`) e utilitário `dev-panel` (bevel sutil, sombra interna).
+- Sidebar fixa 240px colapsável para 64px (ícones lucide: Image, Package, Users, Sparkles, Settings).
+- Componentes shadcn: Button, Input, Textarea, Checkbox, Select, Dialog, Table, Tabs, Slider, ScrollArea, ColorPicker (via input `type=color`).
 
-Substitui o placeholder atual do `GameViewport`:
+### 5. Módulos
 
-- Cria `new Phaser.Game({ type: Phaser.AUTO, parent: divRef, pixelArt: true, scale: { mode: Phaser.Scale.RESIZE } })`.
-- Uma única cena `GameScene` com:
-  - `preload()` — carrega `/assets/mapa.json` (Tiled) e `/assets/sprites.png` (tileset + sprites de jogadores).
-  - `create()` — monta o tilemap, cria layer `ground` e `obstacles` a partir do JSON Tiled, e um `Phaser.GameObjects.Group` para jogadores.
-  - `update()` — apenas interpolação suave (`lerp`) entre posição atual e alvo enviado pelo servidor.
+**5.1 `/dev/sprites`** — Sheet uploader
+- Drag-and-drop → upload para Storage `game-sprites`.
+- Após upload: `Image` carrega no canvas, calcula `cols = floor(w/32) × rows`, renderiza grid overlay.
+- Botão "Registrar sprites" gera N linhas em `game_sprites` (sheet_url, x, y) via server fn batch insert; IDs incrementais são o `serial` do Postgres.
+- Galeria em grid: cada célula = `<canvas>` desenhando o slice a partir de sheet_url + coords. Busca por tag (`ilike` em `tags`). Paginação 100/página. Click → Dialog com zoom + editor de tags.
 
-Estrutura de assets esperada (criada como pastas vazias, com README explicando onde colar os arquivos que o usuário enviará):
+**5.2 `/dev/items`** — CRUD dividido
+- Esquerda: Table com search + botão "Novo Item".
+- Direita: Form (react-hook-form + zod) com todos atributos e flags. Campo `sprite_id` com botão "Escolher…" que abre SpritePicker (reutiliza galeria).
+- Salvar → server fn upsert.
 
-```text
-public/assets/
-  mapa.json      (Tiled export)
-  sprites.png    (tileset + player sprites)
-```
+**5.3 `/dev/creatures`** — Outfits 4-direções
+- Form: look_id, name.
+- Matriz 4×3: 4 direções × (idle, step1, step2), cada célula é um SpritePicker.
+- Preview player: `<canvas>` que alterna idle→step1→idle→step2 a cada 250ms; botões para trocar direção.
 
-Enquanto os arquivos reais não chegam, o loader tem fallback para um tilemap gerado in-memory (grid 20x15 de tiles marrom/verde) e um retângulo colorido por jogador — o jogo já roda ponta-a-ponta sem os assets.
+**5.4 `/dev/spells`** — Efeitos
+- Tabs: **Missiles** | **Magic Effects**.
+- Missiles: 8 SpritePickers (N, NE, E, SE, S, SW, W, NW) → salva `frames` como objeto direcional.
+- Effects: sequência ordenada de sprite_ids (drag-reorder via `@dnd-kit` já ou setas ↑↓ nativas para evitar dep nova), input `frame_rate_ms`, preview animado.
 
-## 4. Sincronização de jogadores
+**5.5 `/dev/config`** — Config global
+- Color pickers: chat public (yellow), server error (red), guild (green), party, private, npc.
+- Sliders: nome flutuante font size, HP bar height, painel alignment (left/right radio).
+- Botão Salvar → upsert singleton (`id=1`) em `game_config` como JSONB único.
+- Export JSON: botão baixa `config.json`.
 
-No `create()` da cena, após juntar-se à sala:
+### 6. Server functions
 
-```ts
-room.state.players.onAdd((player, sessionId) => {
-  const sprite = this.add.sprite(player.x, player.y, "sprites", 0);
-  sprite.setData("target", { x: player.x, y: player.y });
-  this.players.set(sessionId, sprite);
+Todas em `src/lib/dev/*.functions.ts` com `.middleware([requireSupabaseAuth])` + check `has_role admin` no handler:
+- `sprites.functions.ts`: `listSprites`, `createSpritesBatch`, `updateSpriteTags`, `deleteSprite`.
+- `items.functions.ts`: `listItems`, `upsertItem`, `deleteItem`.
+- `creatures.functions.ts`: `listCreatures`, `upsertCreature`, `deleteCreature`.
+- `effects.functions.ts`: `listEffects`, `upsertEffect`, `deleteEffect`.
+- `config.functions.ts`: `getConfig`, `saveConfig`.
+- `admin.functions.ts`: `checkIsAdmin` (para o gate).
 
-  player.onChange = () => {
-    sprite.setData("target", { x: player.x, y: player.y });
-  };
-});
+Reads usam `context.supabase` (RLS como usuário admin); nada precisa de service role.
 
-room.state.players.onRemove((_, sessionId) => {
-  this.players.get(sessionId)?.destroy();
-  this.players.delete(sessionId);
-});
-```
+### 7. Dados como JSON limpo
 
-- `MapSchema<Player>` com `{ x, y, name }` (schema padrão confirmado).
-- O sprite do próprio jogador (`room.sessionId`) recebe uma tint diferente e uma label com o nome sobreposta.
-- `update(dt)` interpola cada sprite: `sprite.x += (target.x - sprite.x) * 0.2` — evita "teletransporte" visual.
+Cada `upsert*` valida via Zod e persiste em colunas tipadas + JSONB quando faz sentido (animations, frames, config). GET fns retornam o registro cru — API-ready.
 
-## 5. Entrada de teclado (Setas + WASD)
+### 8. Detalhes técnicos
 
-Dentro de `GameScene.create()`:
+- Como não sabemos o email do primeiro admin, a migration inclui comentário `-- INSERT INTO user_roles (user_id, role) SELECT id, 'admin' FROM auth.users WHERE email = 'SEU_EMAIL';` e mostro ao usuário como executar no SQL editor após aprovar.
+- Bucket criado via `supabase--storage_create_bucket` (público, para servir sheets diretos ao `<canvas>`).
+- Sem alteração no `GameScene` / Colyseus (integração fica para depois, conforme escolhido).
+- Componente `SpritePicker` reutilizável (Dialog + galeria + retorno de sprite_id).
+- Zero mudanças no layout Tibia existente; painel `/dev` é isolado.
 
-```ts
-this.cursors = this.input.keyboard!.createCursorKeys();
-this.wasd = this.input.keyboard!.addKeys("W,A,S,D") as Record<"W"|"A"|"S"|"D", Phaser.Input.Keyboard.Key>;
-```
+### 9. Ordem de execução
 
-Loop de movimento com throttle (1 tile a cada ~150ms — típico Tibia):
-
-```ts
-if (this.time.now < this.nextMoveAt) return;
-const me = room.state.players.get(room.sessionId);
-if (!me) return;
-
-let dx = 0, dy = 0;
-if (this.cursors.left.isDown  || this.wasd.A.isDown) dx = -1;
-if (this.cursors.right.isDown || this.wasd.D.isDown) dx =  1;
-if (this.cursors.up.isDown    || this.wasd.W.isDown) dy = -1;
-if (this.cursors.down.isDown  || this.wasd.S.isDown) dy =  1;
-
-if (dx || dy) {
-  room.send("move", { x: me.x + dx * TILE, y: me.y + dy * TILE });
-  this.nextMoveAt = this.time.now + 150;
-}
-```
-
-- **Predição local desativada** por padrão — quem manda na posição é o servidor (evita divergências / rubber-banding). A confirmação chega via `player.onChange` → sprite anima até o novo target.
-- Foco: o canvas ganha `tabIndex={0}` e faz `focus()` no clique para que o teclado funcione mesmo com o chat presente.
-- Bloqueio de teclado enquanto o input do chat está com foco (checa `document.activeElement`).
-
-## 6. Integração com o layout existente
-
-- `GameViewport.tsx` passa a renderizar `<PhaserCanvas />` no lugar do placeholder atual, mantendo o overlay de FPS / latência / título de servidor.
-- `tibiaStore` ganha campos derivados atualizados pela rede: `server.fps` (do próprio Phaser via `game.loop.actualFps`) e `server.latency` (round-trip do move).
-- Nenhuma alteração nos outros painéis (Minimap, Vitals, Chat) neste passo.
-
-## 7. Detalhes técnicos
-
-- **SSR**: Phaser toca em `window` no import. `PhaserCanvas.tsx` importa Phaser dinamicamente dentro de `useEffect` para não quebrar o build SSR do TanStack Start.
-- **Cleanup**: `game.destroy(true)` + `room.leave()` no `useEffect` cleanup evita leaks em HMR.
-- **Tipagem do state**: como o schema do servidor não está no cliente, criamos tipos "duck-typed" mínimos (`type PlayerState = { x: number; y: number; name: string }`) — quando o usuário enviar o schema real, substituímos por `import`s gerados.
-- **CORS/WS**: `ws://` funcionará em preview HTTP; se o projeto for publicado em HTTPS, o browser bloqueará ws inseguro — nesse caso o servidor precisará expor `wss://`. Nota a comunicar após publicar.
-
-## Arquivos criados / alterados
-
-- **novo** `src/net/colyseus.ts` — cliente + `joinGameRoom`.
-- **novo** `src/stores/netStore.ts` — guarda `room`, `sessionId`, `connectionStatus`.
-- **novo** `src/components/tibia/PhaserCanvas.tsx` — mount do Phaser + `GameScene`.
-- **novo** `src/game/scenes/GameScene.ts` — cena Phaser com tilemap, players, input, sync.
-- **novo** `public/assets/README.md` — instruções para colar `mapa.json` e `sprites.png`.
-- **edit** `src/components/tibia/GameViewport.tsx` — troca placeholder por `PhaserCanvas`.
-- **edit** `src/stores/tibiaStore.ts` — expõe setters para `server.fps` / `server.latency`.
-- **edit** `package.json` / `bun.lock` — via `bun add colyseus.js phaser`.
+1. Migration Supabase (schema + RLS + roles + storage bucket).
+2. Instruir usuário a rodar SQL para virar admin.
+3. Server functions + gate `_admin`.
+4. Layout + sidebar + rota `/dev`.
+5. Módulos: sprites → items → creatures → spells → config.
+6. Verificar build.
