@@ -16,7 +16,11 @@ import { Route as DevIndexRouteImport } from './routes/dev.index'
 import { Route as DevVocationsRouteImport } from './routes/dev.vocations'
 import { Route as DevSpritesRouteImport } from './routes/dev.sprites'
 import { Route as DevSpellsRouteImport } from './routes/dev.spells'
+import { Route as DevScriptsRouteImport } from './routes/dev.scripts'
+import { Route as DevPalettesRouteImport } from './routes/dev.palettes'
 import { Route as DevOverviewRouteImport } from './routes/dev.overview'
+import { Route as DevObjectsRouteImport } from './routes/dev.objects'
+import { Route as DevNpcsRouteImport } from './routes/dev.npcs'
 import { Route as DevMonstersRouteImport } from './routes/dev.monsters'
 import { Route as DevMapRouteImport } from './routes/dev.map'
 import { Route as DevItemsRouteImport } from './routes/dev.items'
@@ -58,9 +62,29 @@ const DevSpellsRoute = DevSpellsRouteImport.update({
   path: '/spells',
   getParentRoute: () => DevRoute,
 } as any)
+const DevScriptsRoute = DevScriptsRouteImport.update({
+  id: '/scripts',
+  path: '/scripts',
+  getParentRoute: () => DevRoute,
+} as any)
+const DevPalettesRoute = DevPalettesRouteImport.update({
+  id: '/palettes',
+  path: '/palettes',
+  getParentRoute: () => DevRoute,
+} as any)
 const DevOverviewRoute = DevOverviewRouteImport.update({
   id: '/overview',
   path: '/overview',
+  getParentRoute: () => DevRoute,
+} as any)
+const DevObjectsRoute = DevObjectsRouteImport.update({
+  id: '/objects',
+  path: '/objects',
+  getParentRoute: () => DevRoute,
+} as any)
+const DevNpcsRoute = DevNpcsRouteImport.update({
+  id: '/npcs',
+  path: '/npcs',
   getParentRoute: () => DevRoute,
 } as any)
 const DevMonstersRoute = DevMonstersRouteImport.update({
@@ -98,7 +122,11 @@ export interface FileRoutesByFullPath {
   '/dev/items': typeof DevItemsRoute
   '/dev/map': typeof DevMapRoute
   '/dev/monsters': typeof DevMonstersRoute
+  '/dev/npcs': typeof DevNpcsRoute
+  '/dev/objects': typeof DevObjectsRoute
   '/dev/overview': typeof DevOverviewRoute
+  '/dev/palettes': typeof DevPalettesRoute
+  '/dev/scripts': typeof DevScriptsRoute
   '/dev/spells': typeof DevSpellsRoute
   '/dev/sprites': typeof DevSpritesRoute
   '/dev/vocations': typeof DevVocationsRoute
@@ -112,7 +140,11 @@ export interface FileRoutesByTo {
   '/dev/items': typeof DevItemsRoute
   '/dev/map': typeof DevMapRoute
   '/dev/monsters': typeof DevMonstersRoute
+  '/dev/npcs': typeof DevNpcsRoute
+  '/dev/objects': typeof DevObjectsRoute
   '/dev/overview': typeof DevOverviewRoute
+  '/dev/palettes': typeof DevPalettesRoute
+  '/dev/scripts': typeof DevScriptsRoute
   '/dev/spells': typeof DevSpellsRoute
   '/dev/sprites': typeof DevSpritesRoute
   '/dev/vocations': typeof DevVocationsRoute
@@ -128,7 +160,11 @@ export interface FileRoutesById {
   '/dev/items': typeof DevItemsRoute
   '/dev/map': typeof DevMapRoute
   '/dev/monsters': typeof DevMonstersRoute
+  '/dev/npcs': typeof DevNpcsRoute
+  '/dev/objects': typeof DevObjectsRoute
   '/dev/overview': typeof DevOverviewRoute
+  '/dev/palettes': typeof DevPalettesRoute
+  '/dev/scripts': typeof DevScriptsRoute
   '/dev/spells': typeof DevSpellsRoute
   '/dev/sprites': typeof DevSpritesRoute
   '/dev/vocations': typeof DevVocationsRoute
@@ -145,7 +181,11 @@ export interface FileRouteTypes {
     | '/dev/items'
     | '/dev/map'
     | '/dev/monsters'
+    | '/dev/npcs'
+    | '/dev/objects'
     | '/dev/overview'
+    | '/dev/palettes'
+    | '/dev/scripts'
     | '/dev/spells'
     | '/dev/sprites'
     | '/dev/vocations'
@@ -159,7 +199,11 @@ export interface FileRouteTypes {
     | '/dev/items'
     | '/dev/map'
     | '/dev/monsters'
+    | '/dev/npcs'
+    | '/dev/objects'
     | '/dev/overview'
+    | '/dev/palettes'
+    | '/dev/scripts'
     | '/dev/spells'
     | '/dev/sprites'
     | '/dev/vocations'
@@ -174,7 +218,11 @@ export interface FileRouteTypes {
     | '/dev/items'
     | '/dev/map'
     | '/dev/monsters'
+    | '/dev/npcs'
+    | '/dev/objects'
     | '/dev/overview'
+    | '/dev/palettes'
+    | '/dev/scripts'
     | '/dev/spells'
     | '/dev/sprites'
     | '/dev/vocations'
@@ -238,11 +286,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevSpellsRouteImport
       parentRoute: typeof DevRoute
     }
+    '/dev/scripts': {
+      id: '/dev/scripts'
+      path: '/scripts'
+      fullPath: '/dev/scripts'
+      preLoaderRoute: typeof DevScriptsRouteImport
+      parentRoute: typeof DevRoute
+    }
+    '/dev/palettes': {
+      id: '/dev/palettes'
+      path: '/palettes'
+      fullPath: '/dev/palettes'
+      preLoaderRoute: typeof DevPalettesRouteImport
+      parentRoute: typeof DevRoute
+    }
     '/dev/overview': {
       id: '/dev/overview'
       path: '/overview'
       fullPath: '/dev/overview'
       preLoaderRoute: typeof DevOverviewRouteImport
+      parentRoute: typeof DevRoute
+    }
+    '/dev/objects': {
+      id: '/dev/objects'
+      path: '/objects'
+      fullPath: '/dev/objects'
+      preLoaderRoute: typeof DevObjectsRouteImport
+      parentRoute: typeof DevRoute
+    }
+    '/dev/npcs': {
+      id: '/dev/npcs'
+      path: '/npcs'
+      fullPath: '/dev/npcs'
+      preLoaderRoute: typeof DevNpcsRouteImport
       parentRoute: typeof DevRoute
     }
     '/dev/monsters': {
@@ -289,7 +365,11 @@ interface DevRouteChildren {
   DevItemsRoute: typeof DevItemsRoute
   DevMapRoute: typeof DevMapRoute
   DevMonstersRoute: typeof DevMonstersRoute
+  DevNpcsRoute: typeof DevNpcsRoute
+  DevObjectsRoute: typeof DevObjectsRoute
   DevOverviewRoute: typeof DevOverviewRoute
+  DevPalettesRoute: typeof DevPalettesRoute
+  DevScriptsRoute: typeof DevScriptsRoute
   DevSpellsRoute: typeof DevSpellsRoute
   DevSpritesRoute: typeof DevSpritesRoute
   DevVocationsRoute: typeof DevVocationsRoute
@@ -302,7 +382,11 @@ const DevRouteChildren: DevRouteChildren = {
   DevItemsRoute: DevItemsRoute,
   DevMapRoute: DevMapRoute,
   DevMonstersRoute: DevMonstersRoute,
+  DevNpcsRoute: DevNpcsRoute,
+  DevObjectsRoute: DevObjectsRoute,
   DevOverviewRoute: DevOverviewRoute,
+  DevPalettesRoute: DevPalettesRoute,
+  DevScriptsRoute: DevScriptsRoute,
   DevSpellsRoute: DevSpellsRoute,
   DevSpritesRoute: DevSpritesRoute,
   DevVocationsRoute: DevVocationsRoute,
