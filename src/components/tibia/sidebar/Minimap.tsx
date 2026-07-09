@@ -11,16 +11,15 @@ export function Minimap() {
     if (!ctx) return;
     const w = c.width;
     const h = c.height;
-    // procedural noise: green grass, brown paths, gray walls
     const img = ctx.createImageData(w, h);
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4;
         const r = Math.random();
         let cr = 60, cg = 110, cb = 50;
-        if (r < 0.18) { cr = 120; cg = 70; cb = 40; }
-        else if (r < 0.28) { cr = 90; cg = 90; cb = 90; }
-        else if (r < 0.31) { cr = 200; cg = 200; cb = 60; }
+        if (r < 0.22) { cr = 130; cg = 80; cb = 40; }
+        else if (r < 0.32) { cr = 100; cg = 100; cb = 100; }
+        else if (r < 0.34) { cr = 220; cg = 200; cb = 60; }
         img.data[i] = cr;
         img.data[i + 1] = cg;
         img.data[i + 2] = cb;
@@ -28,7 +27,6 @@ export function Minimap() {
       }
     }
     ctx.putImageData(img, 0, 0);
-    // center marker (player)
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(w / 2 - 1, h / 2 - 1, 2, 2);
   }, []);
@@ -37,7 +35,18 @@ export function Minimap() {
     <TibiaWindow title="Minimap">
       <div className="p-1 flex gap-1">
         <div className="flex-1 flex flex-col gap-1">
-          <button className="tibia-btn text-[10px] py-[1px]">Centre</button>
+          <button
+            className="text-[10px] font-bold"
+            style={{
+              background: "linear-gradient(180deg,#4fa04f,#2a6f2a)",
+              color: "#fff",
+              textShadow: "1px 1px 0 #000",
+              boxShadow: "inset 1px 1px 0 #90d090, inset -1px -1px 0 #103010",
+              height: 16,
+            }}
+          >
+            Centre
+          </button>
           <canvas
             ref={canvasRef}
             width={106}
@@ -46,21 +55,21 @@ export function Minimap() {
             style={{ imageRendering: "pixelated" }}
           />
         </div>
-        <div className="flex flex-col justify-between w-[38px]">
-          <div className="grid grid-cols-3 gap-[2px]">
+        <div className="flex flex-col justify-between w-[38px] gap-[2px]">
+          <div className="grid grid-cols-3 gap-[1px]">
             <div />
-            <button className="tibia-btn text-[10px] leading-none py-0">▲</button>
+            <button className="tibia-btn text-[9px] leading-none" style={{ height: 12 }}>▲</button>
             <div />
-            <button className="tibia-btn text-[10px] leading-none py-0">◄</button>
-            <button className="tibia-btn text-[10px] leading-none py-0">●</button>
-            <button className="tibia-btn text-[10px] leading-none py-0">►</button>
+            <button className="tibia-btn text-[9px] leading-none" style={{ height: 12 }}>◄</button>
+            <button className="tibia-btn text-[9px] leading-none" style={{ height: 12 }}>●</button>
+            <button className="tibia-btn text-[9px] leading-none" style={{ height: 12 }}>►</button>
             <div />
-            <button className="tibia-btn text-[10px] leading-none py-0">▼</button>
+            <button className="tibia-btn text-[9px] leading-none" style={{ height: 12 }}>▼</button>
             <div />
           </div>
-          <div className="flex gap-[2px]">
-            <button className="tibia-btn flex-1 text-[10px] py-0">+</button>
-            <button className="tibia-btn flex-1 text-[10px] py-0">−</button>
+          <div className="flex gap-[1px]">
+            <button className="tibia-btn flex-1 text-[10px]" style={{ height: 14 }}>+</button>
+            <button className="tibia-btn flex-1 text-[10px]" style={{ height: 14 }}>−</button>
           </div>
         </div>
       </div>
