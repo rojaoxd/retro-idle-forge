@@ -1,13 +1,10 @@
 import Phaser from "phaser";
 import type { Room } from "colyseus.js";
+import { getMapTiles } from "@/lib/game/map.functions";
 
 const TILE = 32;
 // Tibia 7.4: caminhada base em chão normal ~500ms/SQM.
 const STEP_MS = 500;
-const MAP_URL = "/assets/mapa.json";
-const TILESET_IMAGE_URL = "/assets/nlbWl37.png";
-const TILESET_IMAGE_KEY = "cenario";
-const TILESET_NAME = "cenario";
 
 type PlayerLike = { x: number; y: number; name: string };
 type PlayersMap = {
@@ -25,6 +22,23 @@ type PlayerVisual = {
 
 type Direction = "up" | "down" | "left" | "right";
 
+type Sprite = {
+  id: number;
+  sheet_url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type Tile = {
+  x: number;
+  y: number;
+  layer: "floor" | "obstacles";
+  tile_id: number;
+  blocking: boolean;
+};
+
 export type GameSceneInit = {
   room: Room;
   onLatency?: (ms: number) => void;
@@ -41,8 +55,9 @@ export class GameScene extends Phaser.Scene {
   private onLatency?: (ms: number) => void;
   private onFps?: (fps: number) => void;
   private fpsTimer = 0;
-  private hasTilesetImage = false;
-  private hasTiledMap = false;
+  private blockingSet = new Set<string>();
+  private mapCols = 40;
+  private mapRows = 30;
 
   constructor() {
     super("GameScene");
@@ -54,75 +69,102 @@ export class GameScene extends Phaser.Scene {
     this.onFps = data.onFps;
   }
 
-  preload() {
-    this.load.on("loaderror", (file: Phaser.Loader.File) => {
-      console.warn("[GameScene] loaderror:", file.key, file.src);
-    });
-    this.load.image(TILESET_IMAGE_KEY, TILESET_IMAGE_URL);
-    // Carrega como JSON puro para ignorar qualquer "image" interna do .tmj
-    // (evita Phaser tentar buscar o tileset num path do computador do autor).
-    this.load.json("mapa-json", MAP_URL);
-    this.load.on(`filecomplete-image-${TILESET_IMAGE_KEY}`, () => (this.hasTilesetImage = true));
-    this.load.on("filecomplete-json-mapa-json", () => {
-      const raw = this.cache.json.get("mapa-json");
-      if (raw) {
-        this.cache.tilemap.add("mapa", {
-          format: Phaser.Tilemaps.Formats.TILED_JSON,
-          data: raw,
-        });
-        this.hasTiledMap = true;
-      }
-    });
-  }
-
-
   create() {
     this.cameras.main.setBackgroundColor("#000000");
-    this.buildWorld();
-
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.wasd = this.input.keyboard!.addKeys("W,A,S,D") as Record<
       "W" | "A" | "S" | "D",
       Phaser.Input.Keyboard.Key
     >;
-
     this.cameras.main.setZoom(2);
     this.cameras.main.roundPixels = true;
 
-    this.wireRoom();
+    // Placeholder enquanto carrega
+    this.drawFallback();
+
+    void this.loadWorldFromDB()
+      .catch((e) => console.warn("[GameScene] falha carregando mapa:", e))
+      .finally(() => this.wireRoom());
   }
 
-  private buildWorld() {
-    if (this.hasTiledMap && this.hasTilesetImage) {
-      try {
-        const map = this.make.tilemap({ key: "mapa" });
-        const ts = map.addTilesetImage(TILESET_NAME, TILESET_IMAGE_KEY);
-        if (ts) {
-          map.layers.forEach((l) => map.createLayer(l.name, ts, 0, 0));
-          this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
-          // Fallback de centralização até o player local existir.
-          this.cameras.main.centerOn(map.widthInPixels / 2, map.heightInPixels / 2);
-          return;
-        }
-      } catch (e) {
-        console.warn("[GameScene] Tiled map falhou, usando fallback:", e);
+  private drawFallback() {
+    const g = this.add.graphics();
+    g.fillStyle(0x0a0a0a, 1);
+    g.fillRect(0, 0, this.mapCols * TILE, this.mapRows * TILE);
+    this.cameras.main.setBounds(0, 0, this.mapCols * TILE, this.mapRows * TILE);
+    this.cameras.main.centerOn((this.mapCols * TILE) / 2, (this.mapRows * TILE) / 2);
+  }
+
+  private async loadWorldFromDB() {
+    const { tiles, sprites, urlMap } = (await getMapTiles()) as {
+      tiles: Tile[];
+      sprites: Sprite[];
+      urlMap: Record<string, string | null>;
+    };
+
+    // Carrega folhas de sprites únicas como texturas do Phaser
+    const uniqueSheets = Array.from(new Set(sprites.map((s) => s.sheet_url)));
+    await Promise.all(
+      uniqueSheets.map((path) => this.loadTexture(`sheet:${path}`, urlMap[path] ?? "")),
+    );
+
+    const spriteById = new Map<number, Sprite>();
+    for (const s of sprites) spriteById.set(s.id, s);
+
+    // Calcula extent
+    if (tiles.length) {
+      let maxX = 0;
+      let maxY = 0;
+      for (const t of tiles) {
+        if (t.x > maxX) maxX = t.x;
+        if (t.y > maxY) maxY = t.y;
       }
+      this.mapCols = Math.max(this.mapCols, maxX + 1);
+      this.mapRows = Math.max(this.mapRows, maxY + 1);
+      this.cameras.main.setBounds(0, 0, this.mapCols * TILE, this.mapRows * TILE);
     }
 
-    const g = this.add.graphics();
-    for (let y = 0; y < 50; y++) {
-      for (let x = 0; x < 50; x++) {
-        const r = Math.random();
-        let color = 0x2e6b2a;
-        if (r < 0.18) color = 0x7a5a30;
-        else if (r < 0.22) color = 0x555555;
-        g.fillStyle(color, 1);
-        g.fillRect(x * TILE, y * TILE, TILE, TILE);
-        g.lineStyle(1, 0x000000, 0.15);
-        g.strokeRect(x * TILE, y * TILE, TILE, TILE);
-      }
+    // Ordena: floor primeiro, obstacles depois
+    const ordered = [...tiles].sort((a, b) =>
+      a.layer === b.layer ? 0 : a.layer === "floor" ? -1 : 1,
+    );
+
+    for (const t of ordered) {
+      const sp = spriteById.get(t.tile_id);
+      if (!sp) continue;
+      const texKey = `sheet:${sp.sheet_url}`;
+      if (!this.textures.exists(texKey)) continue;
+      const img = this.add.image(t.x * TILE, t.y * TILE, texKey);
+      img.setOrigin(0, 0);
+      img.setCrop(sp.x, sp.y, sp.width, sp.height);
+      // Desloca para que o crop apareça alinhado à origem
+      img.setPosition(t.x * TILE - sp.x, t.y * TILE - sp.y);
+      img.setDepth(t.layer === "floor" ? 1 : 2);
+      if (t.blocking) this.blockingSet.add(`${t.x},${t.y}`);
     }
-    this.cameras.main.setBounds(0, 0, 50 * TILE, 50 * TILE);
+
+    // Envia colisões pro servidor Colyseus (fallback: servidor idealmente lê direto do Supabase)
+    const blockingTiles = tiles
+      .filter((t) => t.blocking)
+      .map((t) => ({ x: t.x, y: t.y }));
+    try {
+      this.room.send("map:sync", { tiles: blockingTiles });
+    } catch {
+      /* ignora se servidor não conhecer a mensagem */
+    }
+  }
+
+  private loadTexture(key: string, url: string): Promise<void> {
+    return new Promise((resolve) => {
+      if (!url || this.textures.exists(key)) {
+        resolve();
+        return;
+      }
+      this.load.image(key, url);
+      this.load.once(`filecomplete-image-${key}`, () => resolve());
+      this.load.once("loaderror", () => resolve());
+      this.load.start();
+    });
   }
 
   private moveTo(vis: PlayerVisual, x: number, y: number, instant = false) {
@@ -159,6 +201,7 @@ export class GameScene extends Phaser.Scene {
       if (this.players.has(sessionId)) return;
       const isMe = sessionId === this.room.sessionId;
       const container = this.add.container(p.x, p.y);
+      container.setDepth(10);
       const rect = this.add.rectangle(0, 0, TILE - 6, TILE - 6, isMe ? 0x4fa4ff : 0xd4b46a);
       rect.setStrokeStyle(1, 0x000000);
       const label = this.add.text(0, -TILE / 2 - 6, p.name ?? "?", {
@@ -184,8 +227,6 @@ export class GameScene extends Phaser.Scene {
       const update = () => {
         const v = this.players.get(sessionId);
         if (!v) return;
-        // Se o alvo do servidor bate com o tween em andamento (predição local),
-        // não recria; senão, faz tween linear até a nova posição autoritativa.
         const data = v.tween?.data as Array<{ key: string; end: number }> | undefined;
         const targetX = data?.find((d) => d.key === "x")?.end ?? v.container.x;
         const targetY = data?.find((d) => d.key === "y")?.end ?? v.container.y;
@@ -213,7 +254,6 @@ export class GameScene extends Phaser.Scene {
       this.players.delete(sessionId);
     };
 
-    // Registra listeners ANTES do forEach para não perder ninguém.
     players.onAdd(addPlayer);
     players.onRemove(removePlayer);
     players.forEach(addPlayer);
@@ -254,11 +294,17 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (dir) {
+      const tileX = Math.round(me.x / TILE) + dx;
+      const tileY = Math.round(me.y / TILE) + dy;
+      // Client-side collision check (autoridade continua no servidor)
+      if (this.blockingSet.has(`${tileX},${tileY}`)) {
+        this.nextMoveAt = this.time.now + 100;
+        return;
+      }
       const nx = me.x + dx * TILE;
       const ny = me.y + dy * TILE;
       this.lastMoveSentAt = Date.now();
       this.room.send("move", { direction: dir });
-      // Predição local: já desliza o container do jogador local.
       this.moveTo(myVis, nx, ny);
       this.nextMoveAt = this.time.now + STEP_MS;
     }

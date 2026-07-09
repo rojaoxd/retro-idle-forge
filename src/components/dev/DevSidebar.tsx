@@ -1,10 +1,11 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Image, Package, Users, Sparkles, Settings, LogOut } from "lucide-react";
+import { Image, Package, Users, Sparkles, Settings, LogOut, Map } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 const items = [
   { to: "/dev/sprites", label: "Sprites", icon: Image },
+  { to: "/dev/map", label: "Map Editor", icon: Map },
   { to: "/dev/items", label: "Items & Objetos", icon: Package },
   { to: "/dev/creatures", label: "Outfits & Criaturas", icon: Users },
   { to: "/dev/spells", label: "Efeitos & Projéteis", icon: Sparkles },
