@@ -196,6 +196,47 @@ export type Database = {
         }
         Relationships: []
       }
+      map_tiles: {
+        Row: {
+          blocking: boolean
+          created_at: string
+          id: string
+          layer: string
+          tile_id: number
+          updated_at: string
+          x: number
+          y: number
+        }
+        Insert: {
+          blocking?: boolean
+          created_at?: string
+          id?: string
+          layer: string
+          tile_id: number
+          updated_at?: string
+          x: number
+          y: number
+        }
+        Update: {
+          blocking?: boolean
+          created_at?: string
+          id?: string
+          layer?: string
+          tile_id?: number
+          updated_at?: string
+          x?: number
+          y?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "map_tiles_tile_id_fkey"
+            columns: ["tile_id"]
+            isOneToOne: false
+            referencedRelation: "game_sprites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           character_name: string
