@@ -58,6 +58,8 @@ type State = {
   setChat: (c: ChatChannel) => void;
   toggleChat: () => void;
   sendChat: (text: string) => void;
+  setFps: (fps: number) => void;
+  setLatency: (ms: number) => void;
 };
 
 const now = () => {
