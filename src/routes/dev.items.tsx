@@ -176,11 +176,24 @@ function ItemForm({
 
   return (
     <div className="dev-panel space-y-6 p-6">
-      <div className="grid gap-4 md:grid-cols-[auto_1fr]">
+      <div className="grid gap-4 md:grid-cols-[auto_1fr_200px]">
         <SpritePicker value={v.sprite_id} onChange={(id) => set("sprite_id", id)} label="Sprite ID" />
         <div className="space-y-2">
           <label className="block text-xs uppercase text-slate-400">Nome do Item</label>
           <Input value={v.name} onChange={(e) => set("name", e.target.value)} placeholder="ex.: Sword" />
+        </div>
+        <div className="space-y-2">
+          <label className="block text-xs uppercase text-slate-400">Tipo</label>
+          <Select value={v.item_type} onValueChange={(val) => set("item_type", val as any)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="weapon">Arma</SelectItem>
+              <SelectItem value="armor">Armadura</SelectItem>
+              <SelectItem value="rune">Runa</SelectItem>
+              <SelectItem value="fluid">Fluido</SelectItem>
+              <SelectItem value="misc">Outro</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
