@@ -13,8 +13,11 @@ import { Route as DevRouteImport } from './routes/dev'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DevIndexRouteImport } from './routes/dev.index'
+import { Route as DevVocationsRouteImport } from './routes/dev.vocations'
 import { Route as DevSpritesRouteImport } from './routes/dev.sprites'
 import { Route as DevSpellsRouteImport } from './routes/dev.spells'
+import { Route as DevOverviewRouteImport } from './routes/dev.overview'
+import { Route as DevMonstersRouteImport } from './routes/dev.monsters'
 import { Route as DevMapRouteImport } from './routes/dev.map'
 import { Route as DevItemsRouteImport } from './routes/dev.items'
 import { Route as DevCreaturesRouteImport } from './routes/dev.creatures'
@@ -40,6 +43,11 @@ const DevIndexRoute = DevIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DevRoute,
 } as any)
+const DevVocationsRoute = DevVocationsRouteImport.update({
+  id: '/vocations',
+  path: '/vocations',
+  getParentRoute: () => DevRoute,
+} as any)
 const DevSpritesRoute = DevSpritesRouteImport.update({
   id: '/sprites',
   path: '/sprites',
@@ -48,6 +56,16 @@ const DevSpritesRoute = DevSpritesRouteImport.update({
 const DevSpellsRoute = DevSpellsRouteImport.update({
   id: '/spells',
   path: '/spells',
+  getParentRoute: () => DevRoute,
+} as any)
+const DevOverviewRoute = DevOverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => DevRoute,
+} as any)
+const DevMonstersRoute = DevMonstersRouteImport.update({
+  id: '/monsters',
+  path: '/monsters',
   getParentRoute: () => DevRoute,
 } as any)
 const DevMapRoute = DevMapRouteImport.update({
@@ -79,8 +97,11 @@ export interface FileRoutesByFullPath {
   '/dev/creatures': typeof DevCreaturesRoute
   '/dev/items': typeof DevItemsRoute
   '/dev/map': typeof DevMapRoute
+  '/dev/monsters': typeof DevMonstersRoute
+  '/dev/overview': typeof DevOverviewRoute
   '/dev/spells': typeof DevSpellsRoute
   '/dev/sprites': typeof DevSpritesRoute
+  '/dev/vocations': typeof DevVocationsRoute
   '/dev/': typeof DevIndexRoute
 }
 export interface FileRoutesByTo {
@@ -90,8 +111,11 @@ export interface FileRoutesByTo {
   '/dev/creatures': typeof DevCreaturesRoute
   '/dev/items': typeof DevItemsRoute
   '/dev/map': typeof DevMapRoute
+  '/dev/monsters': typeof DevMonstersRoute
+  '/dev/overview': typeof DevOverviewRoute
   '/dev/spells': typeof DevSpellsRoute
   '/dev/sprites': typeof DevSpritesRoute
+  '/dev/vocations': typeof DevVocationsRoute
   '/dev': typeof DevIndexRoute
 }
 export interface FileRoutesById {
@@ -103,8 +127,11 @@ export interface FileRoutesById {
   '/dev/creatures': typeof DevCreaturesRoute
   '/dev/items': typeof DevItemsRoute
   '/dev/map': typeof DevMapRoute
+  '/dev/monsters': typeof DevMonstersRoute
+  '/dev/overview': typeof DevOverviewRoute
   '/dev/spells': typeof DevSpellsRoute
   '/dev/sprites': typeof DevSpritesRoute
+  '/dev/vocations': typeof DevVocationsRoute
   '/dev/': typeof DevIndexRoute
 }
 export interface FileRouteTypes {
@@ -117,8 +144,11 @@ export interface FileRouteTypes {
     | '/dev/creatures'
     | '/dev/items'
     | '/dev/map'
+    | '/dev/monsters'
+    | '/dev/overview'
     | '/dev/spells'
     | '/dev/sprites'
+    | '/dev/vocations'
     | '/dev/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -128,8 +158,11 @@ export interface FileRouteTypes {
     | '/dev/creatures'
     | '/dev/items'
     | '/dev/map'
+    | '/dev/monsters'
+    | '/dev/overview'
     | '/dev/spells'
     | '/dev/sprites'
+    | '/dev/vocations'
     | '/dev'
   id:
     | '__root__'
@@ -140,8 +173,11 @@ export interface FileRouteTypes {
     | '/dev/creatures'
     | '/dev/items'
     | '/dev/map'
+    | '/dev/monsters'
+    | '/dev/overview'
     | '/dev/spells'
     | '/dev/sprites'
+    | '/dev/vocations'
     | '/dev/'
   fileRoutesById: FileRoutesById
 }
@@ -181,6 +217,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevIndexRouteImport
       parentRoute: typeof DevRoute
     }
+    '/dev/vocations': {
+      id: '/dev/vocations'
+      path: '/vocations'
+      fullPath: '/dev/vocations'
+      preLoaderRoute: typeof DevVocationsRouteImport
+      parentRoute: typeof DevRoute
+    }
     '/dev/sprites': {
       id: '/dev/sprites'
       path: '/sprites'
@@ -193,6 +236,20 @@ declare module '@tanstack/react-router' {
       path: '/spells'
       fullPath: '/dev/spells'
       preLoaderRoute: typeof DevSpellsRouteImport
+      parentRoute: typeof DevRoute
+    }
+    '/dev/overview': {
+      id: '/dev/overview'
+      path: '/overview'
+      fullPath: '/dev/overview'
+      preLoaderRoute: typeof DevOverviewRouteImport
+      parentRoute: typeof DevRoute
+    }
+    '/dev/monsters': {
+      id: '/dev/monsters'
+      path: '/monsters'
+      fullPath: '/dev/monsters'
+      preLoaderRoute: typeof DevMonstersRouteImport
       parentRoute: typeof DevRoute
     }
     '/dev/map': {
@@ -231,8 +288,11 @@ interface DevRouteChildren {
   DevCreaturesRoute: typeof DevCreaturesRoute
   DevItemsRoute: typeof DevItemsRoute
   DevMapRoute: typeof DevMapRoute
+  DevMonstersRoute: typeof DevMonstersRoute
+  DevOverviewRoute: typeof DevOverviewRoute
   DevSpellsRoute: typeof DevSpellsRoute
   DevSpritesRoute: typeof DevSpritesRoute
+  DevVocationsRoute: typeof DevVocationsRoute
   DevIndexRoute: typeof DevIndexRoute
 }
 
@@ -241,8 +301,11 @@ const DevRouteChildren: DevRouteChildren = {
   DevCreaturesRoute: DevCreaturesRoute,
   DevItemsRoute: DevItemsRoute,
   DevMapRoute: DevMapRoute,
+  DevMonstersRoute: DevMonstersRoute,
+  DevOverviewRoute: DevOverviewRoute,
   DevSpellsRoute: DevSpellsRoute,
   DevSpritesRoute: DevSpritesRoute,
+  DevVocationsRoute: DevVocationsRoute,
   DevIndexRoute: DevIndexRoute,
 }
 

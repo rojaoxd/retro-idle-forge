@@ -17,6 +17,7 @@ export const Route = createFileRoute("/dev/items")({
 type Item = {
   id?: string;
   name: string;
+  item_type: "weapon" | "armor" | "rune" | "fluid" | "misc";
   sprite_id: number | null;
   weight: number;
   capacity: number;
@@ -35,6 +36,7 @@ type Item = {
 
 const empty: Item = {
   name: "",
+  item_type: "misc",
   sprite_id: null,
   weight: 0,
   capacity: 0,
@@ -49,6 +51,14 @@ const empty: Item = {
   is_liquid_container: false,
   has_height: false,
   extra: {},
+};
+
+const TYPE_LABELS: Record<Item["item_type"], string> = {
+  weapon: "Arma",
+  armor: "Armadura",
+  rune: "Runa",
+  fluid: "Fluido",
+  misc: "Outro",
 };
 
 function ItemsPage() {

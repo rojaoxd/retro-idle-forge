@@ -10,6 +10,7 @@ async function assertAdmin(ctx: { supabase: any; userId: string }) {
 const itemSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1),
+  item_type: z.enum(["weapon", "armor", "rune", "fluid", "misc"]).default("misc"),
   sprite_id: z.number().int().nullable().optional(),
   weight: z.number().default(0),
   capacity: z.number().int().default(0),
