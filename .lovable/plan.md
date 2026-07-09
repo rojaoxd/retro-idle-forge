@@ -1,89 +1,129 @@
-## Objetivo
-Abandonar `mapa.json` local e centralizar mapa/colisões no Supabase, com editor interno em `/dev/map`, renderização dinâmica no Phaser e sincronização de colisões com o Colyseus.
+# Painel Admin Definitivo `/dev` — Database-Driven
 
-## 1. Banco de dados (migration Supabase)
+Vou expandir o painel `/dev` atual (já tem Sprites, Map Editor, Items, Creatures, Spells, Config) para um dashboard SaaS-gamer completo, com nova aba **Overview & Controle**, refactor das abas existentes para o escopo pedido, e novas tabelas no Supabase.
 
-Criar tabela `public.map_tiles`:
+## 1. Migrações Supabase (novas tabelas + colunas)
 
-- `id uuid pk default gen_random_uuid()`
-- `x integer not null`
-- `y integer not null`
-- `layer text not null` — `'floor' | 'obstacles'` (constraint check)
-- `tile_id integer not null` — referencia `game_sprites.id` (sprite escolhido na paleta)
-- `blocking boolean not null default false`
-- `created_at`, `updated_at` (+ trigger `set_updated_at`)
-- `unique (x, y, layer)` — 1 tile por célula/camada, permite upsert por coord+layer
+### `server_configs` (nova, single-row pattern)
+- `id` (int, pk, default 1, check =1)
+- `status` (text: `'online' | 'maintenance'`)
+- `motd` (text, opcional — mensagem do dia)
+- `updated_at`, `updated_by` (uuid → auth.users)
+- RLS: `SELECT` público (anon+auth), `UPDATE` só admin (via `has_role`). Realtime ON.
 
-Grants + RLS:
-- `GRANT SELECT ON public.map_tiles TO anon, authenticated` (mapa é público — todo mundo joga o mesmo mundo)
-- `GRANT INSERT, UPDATE, DELETE ON public.map_tiles TO authenticated`
-- `GRANT ALL ... TO service_role`
-- RLS: SELECT liberado (`using (true)`), INSERT/UPDATE/DELETE só para `has_role(auth.uid(), 'admin')`
+### `online_players` (nova)
+- `id` (uuid pk), `user_id` (uuid, unique), `character_name` (text)
+- `x`, `y` (int), `last_heartbeat` (timestamptz)
+- RLS: `SELECT` admin only, `UPSERT/DELETE` service_role (Colyseus). Realtime ON.
+- Contador via `SELECT count(*) WHERE last_heartbeat > now()-30s`.
 
-Realtime: `ALTER PUBLICATION supabase_realtime ADD TABLE public.map_tiles` (opcional — permite o editor ver mudanças ao vivo e o Phaser recarregar sem F5).
+### `server_logs` (nova)
+- `id` (uuid pk), `created_at` (timestamptz, index desc)
+- `level` (text: `info|warn|error|debug`)
+- `source` (text: ex. `colyseus`, `auth`, `admin`)
+- `message` (text), `meta` (jsonb)
+- RLS: `SELECT` admin only, `INSERT` service_role. Realtime ON.
+- Retenção: cron/manual truncate (fora do escopo agora).
 
-## 2. Editor `/dev/map` (novo)
+### `monsters` (nova — separada de `game_creatures` que é só sprite/outfit)
+- `id` (uuid pk), `name`, `hp` (int), `speed` (int)
+- `exp_reward` (int), `max_damage` (int)
+- `sprite_id` (int → `game_sprites`)
+- `loot_table` (jsonb: `[{item_id, chance, min, max}]`)
+- RLS: `SELECT` público, CRUD admin.
 
-Novo arquivo `src/routes/dev.map.tsx` + entrada no `DevSidebar`. Layout:
+### `vocations` (nova)
+- `id` (uuid pk), `name` (text unique)
+- `hp_per_level`, `mana_per_level`, `capacity_per_level` (int)
+- `hp_regen_ms`, `mana_regen_ms` (int)
+- RLS: `SELECT` público, CRUD admin.
 
-```text
-+---------------------------------------------+
-| Toolbar: [Layer: floor|obstacles] [Blocking?]|
-|          [Ferramenta: pincel|borracha]      |
-+---------------+-----------------------------+
-| Paleta        |  Grid (canvas 40x40 tiles)  |
-| (SpritePicker |  - click esquerdo: pinta    |
-|  em grade     |  - click direito: apaga     |
-|  filtrada)    |  - hover: preview           |
-+---------------+-----------------------------+
+### `spells` (nova)
+- `id` (uuid pk), `name` (text), `words` (text unique — ex. `exura`)
+- `mana_cost` (int), `min_level` (int)
+- `vocation_id` (uuid → vocations, nullable = todas)
+- `kind` (text: `healing|attack|support|rune`)
+- `effect_id` (uuid → `game_visual_effects`, nullable)
+- RLS: `SELECT` público, CRUD admin.
+
+### `items` (extensão — reusar `game_items` existente)
+- Já tem name, attack, defense, weight, sprite_id, weapon_type. Adicionar:
+- `item_type` (text: `weapon|armor|rune|fluid|misc`) — coluna nova.
+- CRUD já existe em `/dev/items`, será revisto pra bater com o escopo.
+
+### `map_tiles` (extensão)
+- Adicionar `spawn_monster_id` (uuid → monsters, nullable). Quando não-null, o tile é ponto de spawn.
+- Layer ganha valor `'spawn'` além de `'floor'|'obstacles'`.
+
+Todas com `set_updated_at()` trigger e GRANTs explícitos (`authenticated`+`service_role`; `anon` só onde SELECT for público).
+
+## 2. Layout do Painel
+
+Sidebar reorganizada (`DevSidebar.tsx`):
+
+```
+Engine Console
+├── Overview            (novo — home do /dev)
+├── Mapa & Spawns       (rename de Map Editor)
+├── Itens & Equipamentos
+├── Criaturas (Monstros) (novo — separado de Outfits)
+├── Outfits & Sprites   (merge de Sprites + Outfits atuais)
+├── Vocações & Magias   (novo)
+└── Config Global
 ```
 
-Comportamento:
-- Paleta reaproveita `listSprites` (já existente em `src/lib/dev/sprites.functions.ts`)
-- Grid renderiza tiles já salvos (SELECT em `map_tiles`), sobrepondo layer floor + obstacles
-- Ao clicar: upsert `{x, y, layer, tile_id, blocking}` via server fn nova `saveTile` (`.middleware([requireSupabaseAuth])` + check `has_role admin`)
-- Borracha: `deleteTile({x,y,layer})`
-- Botão "Publicar" opcional — só é útil se adicionarmos versionamento; nesta iteração salvamos direto (a rota já é gated por admin)
+Redirect `/dev` → `/dev/overview` (era `/dev/sprites`).
 
-Novos arquivos:
-- `src/lib/dev/map.functions.ts` — `listTiles`, `upsertTile`, `deleteTile`
-- `src/components/dev/MapEditor.tsx` — canvas + paleta
-- `src/routes/dev.map.tsx` — wrapper de rota
+## 3. Telas
 
-## 3. GameScene: carregar mapa do Supabase
+### `/dev/overview` (novo)
+- **Grid 3-col**: `ServerStatusCard`, `OnlinePlayersCard`, `QuickStatsCard` (totais de items/monstros/tiles).
+- **ServerStatusCard**: badge Online/Maintenance + Switch grande; server fn `toggleServerStatus` (admin-only) atualiza `server_configs`. Subscribe realtime pra refletir mudanças de outros admins.
+- **OnlinePlayersCard**: número grande + sparkline últimos 5min; realtime channel em `online_players`.
+- **LiveLogsTerminal**: `<pre>` preto full-width, mono, auto-scroll, colorido por `level`. Realtime INSERT em `server_logs`, buffer últimos 200. Filtros (level, source) e botão pause.
 
-Em `src/game/scenes/GameScene.ts`:
+### `/dev/items` (refactor)
+- Tabela com filtros por `item_type`. Modal de edit com campos: name, item_type (Select: Arma/Armadura/Runa/Fluido/Outro), attack, defense, weight, sprite (via `SpritePicker`). Campos condicionais (attack só se weapon).
 
-- Remover `load.json("mapa-json", …)` e toda a lógica de `cache.tilemap.add`
-- Manter `load.image(TILESET_IMAGE_KEY, TILESET_IMAGE_URL)` (o PNG do tileset continua sendo asset estático)
-- Novo `preload`: também carregar via `fetch` (ou server fn pública `getMapTiles`) a lista de `map_tiles`. Fazer isso em `create()` async, exibindo tela preta neutra enquanto carrega.
-- `buildWorld()` passa a iterar sobre os tiles retornados: para cada `{x, y, tile_id, layer}`, ler `game_sprites` (join no server) para pegar `sheet_url, sx, sy, w, h` e desenhar via `this.add.image(x*TILE, y*TILE, key).setCrop(...)` **ou** gerar texturas dinâmicas com `this.textures.addSpriteSheetFromAtlas` a partir do PNG do tileset já carregado.
-- Camada `obstacles` renderiza por cima; `floor` embaixo.
-- Guardar `blockingSet = Set<"x,y">` para debug local (opcional — a autoridade de colisão é o servidor).
+### `/dev/creatures` (renomeado → Monstros)
+- Vira CRUD de `monsters`. Editor de Loot Table: linhas `[item picker | chance % | min | max] + Add`. Preview de sprite.
+- Outfits/creatures visuais movem pra `/dev/sprites` (aba interna).
 
-Server fn nova (pública, read-only via cliente publishable):
-`src/lib/game/map.functions.ts` → `getMapTiles()` retorna `{ tiles: [{x,y,layer,tile_id,blocking, sprite:{sheet_url_signed,x,y,w,h}}] }`.
+### `/dev/vocations` (novo)
+- Tabs internas: **Vocações** | **Magias**.
+- Vocações: CRUD tabular.
+- Magias: CRUD com filtro por vocação, picker de effect visual.
 
-## 4. Sincronizar colisões com Colyseus (AWS)
+### `/dev/map` (evolução)
+- Toolbar ganha 3 modos: **Paint tile** | **Toggle blocking** | **Set spawn**.
+- Modo spawn abre picker de monstro; clique grava tile com `layer='spawn'`, `spawn_monster_id=<id>`.
+- Overlay visual: ícone de caveira nos tiles de spawn, borda vermelha nos blocking.
 
-O servidor Colyseus vive fora deste repo, então o cliente:
+## 4. Server Functions (novas)
 
-- Após conectar na `GameRoom`, envia uma vez `room.send("map:sync", { tiles: blockingTiles })` contendo apenas `{x, y, blocking:true}` das células bloqueadas (payload enxuto).
-- Alternativa recomendada: adicionar no plano uma **anotação para o servidor** — o servidor deveria ler direto do Supabase com service key na inicialização da sala, evitando confiar no cliente. Como não podemos editar o servidor daqui, deixamos o `map:sync` como fallback e documentamos no `.lovable/plan.md` a mudança necessária no servidor.
-- Enquanto o servidor não conhece as colisões, o cliente **não** faz predição de movimento em tile bloqueado: consulta `blockingSet` local antes de `room.send("move", …)` e ignora a tecla.
+Em `src/lib/dev/`:
+- `server.functions.ts`: `getServerStatus` (público), `setServerStatus` (admin), `getOnlinePlayersCount` (admin), `getRecentLogs(limit)` (admin), `insertLog` (service_role via `.server.ts` — pra uso interno/testes).
+- `monsters.functions.ts`: CRUD.
+- `vocations.functions.ts`: CRUD.
+- `spells.functions.ts`: CRUD.
+- `items.functions.ts` existente: adicionar `item_type`.
+- `map.functions.ts` existente: aceitar `spawn_monster_id` no upsert.
 
-## Fora de escopo
-- Múltiplos andares/z-levels (só floor/obstacles nesta iteração)
-- Versionamento/publicação de mapa
-- Editar o servidor Colyseus (só documentamos o contrato `map:sync`)
-- Animação de tiles, tiles com script (portas, teleport)
+Todas com `requireSupabaseAuth` + assert admin (padrão já usado em `creatures.functions.ts`).
 
-## Arquivos afetados
-- **novo** migration `map_tiles`
-- **novo** `src/lib/dev/map.functions.ts`
-- **novo** `src/lib/game/map.functions.ts`
-- **novo** `src/components/dev/MapEditor.tsx`
-- **novo** `src/routes/dev.map.tsx`
-- **edit** `src/components/dev/DevSidebar.tsx` (link "Map Editor")
-- **edit** `src/game/scenes/GameScene.ts` (remover Tiled, carregar do banco, enviar `map:sync`)
-- **remover** `public/assets/mapa.json` (após validar)
+## 5. Realtime
+
+Habilitar `supabase_realtime` publication em: `server_configs`, `online_players`, `server_logs`. Overview subscreve os três com cleanup em `useEffect`.
+
+## 6. Design
+
+Reutilizar tokens `--dev-*` já definidos. Terminal de logs com fundo `#000`, mono `ui-monospace`, cor por level (info=slate-300, warn=amber-400, error=red-400, debug=slate-500). Cards com `dev-panel` + accent glow no status.
+
+## Fora do escopo
+
+- Backend Colyseus escrevendo em `online_players`/`server_logs` (só criamos as tabelas + o painel de leitura; integração real do server AWS fica pra outra tarefa).
+- Retenção/rotação de logs.
+- Editor de animações de monstro (usa sprite estático por agora).
+- Auth/roles novos (usa `has_role('admin')` já existente).
+
+Aprova pra eu começar pela migração + `/dev/overview`?
