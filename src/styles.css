@@ -159,41 +159,44 @@
 /* ============ Tibia 7.4 classic client tokens ============ */
 :root {
   --tibia-bg: #000000;
-  --tibia-panel: #444444;
-  --tibia-panel-dark: #222222;
-  --tibia-header: #3a3a3a;
-  --tibia-border-light: #888888;
-  --tibia-border-dark: #111111;
-  --tibia-text: #c0c0c0;
-  --tibia-text-dim: #909090;
-  --tibia-hp: #c03030;
-  --tibia-mp: #3060c0;
-  --tibia-accent-green: #40a040;
-  --tibia-timestamp: #c0c000;
-  --tibia-system: #c03030;
+  --tibia-panel: #484848;          /* flat medium gray for windows */
+  --tibia-panel-dark: #2f2f2f;     /* deeper gray behind tabs / chrome */
+  --tibia-header: #5a5a5a;         /* window title bar */
+  --tibia-slot: #1a1a1a;           /* inset slot background */
+  --tibia-border-light: #808080;
+  --tibia-border-dark: #000000;
+  --tibia-text: #b8b8b8;
+  --tibia-text-dim: #7a7a7a;
+  --tibia-text-bright: #ffffff;
+  --tibia-hp: #c02020;             /* Tibia HP red */
+  --tibia-mp: #3040c0;             /* Tibia mana blue */
+  --tibia-accent-green: #40c040;   /* char name / FPS green */
+  --tibia-timestamp: #d4d400;      /* yellow timestamps */
+  --tibia-system: #d43030;         /* red system messages */
+  --tibia-store: #58a058;          /* Store button green */
 }
 
 @utility tibia-bevel {
+  background-color: var(--tibia-panel);
   box-shadow:
     inset 1px 1px 0 0 var(--tibia-border-light),
-    inset -1px -1px 0 0 var(--tibia-border-dark),
-    0 0 0 1px #000;
+    inset -1px -1px 0 0 var(--tibia-border-dark);
 }
 
 @utility tibia-inset {
-  background-color: #000;
+  background-color: var(--tibia-slot);
   box-shadow:
     inset 1px 1px 0 0 var(--tibia-border-dark),
     inset -1px -1px 0 0 var(--tibia-border-light);
 }
 
 @utility tibia-header {
-  background: linear-gradient(180deg, #5a5a5a 0%, #3a3a3a 100%);
-  box-shadow: inset 0 -1px 0 0 #000;
+  background-color: var(--tibia-header);
+  box-shadow: inset 0 -1px 0 0 var(--tibia-border-dark);
 }
 
 @utility tibia-btn {
-  background: linear-gradient(180deg, #6a6a6a 0%, #3a3a3a 100%);
+  background-color: var(--tibia-panel);
   color: var(--tibia-text);
   box-shadow:
     inset 1px 1px 0 0 var(--tibia-border-light),
@@ -208,20 +211,23 @@
   }
 }
 
-
 @utility tibia-tab {
-  background: linear-gradient(180deg, #555 0%, #333 100%);
+  background-color: #3a3a3a;
   color: var(--tibia-text-dim);
   box-shadow:
     inset 1px 1px 0 0 var(--tibia-border-light),
-    inset -1px 0 0 0 var(--tibia-border-dark);
+    inset -1px -1px 0 0 var(--tibia-border-dark);
   cursor: pointer;
   text-align: center;
 }
 
 @utility tibia-tab-active {
-  background: linear-gradient(180deg, #6a6a6a 0%, #444 100%);
-  color: #fff;
-  text-shadow: 1px 1px 0 #000;
+  background-color: var(--tibia-panel);
+  color: var(--tibia-text-bright);
+  box-shadow:
+    inset 1px 1px 0 0 var(--tibia-border-light),
+    inset -1px 0 0 0 var(--tibia-border-dark),
+    inset 1px 0 0 0 var(--tibia-border-dark);
 }
+
 
