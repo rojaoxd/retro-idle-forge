@@ -88,10 +88,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         property: "og:description",
         content:
-          "Retro pixel-art browser MMORPG idle. Level, loot, and party with friends.",
+          "A retro pixel-art browser MMORPG idle game. Level up, loot dungeons, and party with friends in the Aetheric Realms.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Aetheric Realms — Idle MMORPG" },
+      { name: "twitter:description", content: "A retro pixel-art browser MMORPG idle game. Level up, loot dungeons, and party with friends in the Aetheric Realms." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/74a1cec3-bf30-454b-854e-605c1003a7b8/id-preview-1f143ba9--639c9069-4daa-4c95-9ffc-13b3d0151427.lovable.app-1783577136723.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/74a1cec3-bf30-454b-854e-605c1003a7b8/id-preview-1f143ba9--639c9069-4daa-4c95-9ffc-13b3d0151427.lovable.app-1783577136723.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
