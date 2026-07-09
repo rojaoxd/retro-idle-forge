@@ -86,7 +86,7 @@ function CreaturesPage() {
               <button
                 key={r.id}
                 type="button"
-                onClick={() => setSelected(r)}
+                onClick={() => setSelected(r as any)}
                 className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-slate-800"
                 style={{
                   color: selected.id === r.id ? "var(--dev-accent)" : "var(--dev-text)",
