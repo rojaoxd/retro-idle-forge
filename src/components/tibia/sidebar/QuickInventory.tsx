@@ -19,9 +19,7 @@ function Slot({ slot }: { slot: EquipSlot | null }) {
       className="tibia-inset flex items-center justify-center"
       style={{ width: 32, height: 32 }}
     >
-      {slot && (
-        <span style={{ fontSize: 16, color: "#3a3a3a" }}>{slotGlyph[slot]}</span>
-      )}
+      {slot && <span style={{ fontSize: 16, color: "#3a3a3a" }}>{slotGlyph[slot]}</span>}
     </div>
   );
 }
@@ -59,10 +57,16 @@ export function QuickInventory() {
 
   return (
     <div className="tibia-bevel p-1 flex gap-1">
-      <div className="grid grid-cols-3 gap-[2px]">
-        {grid.map((s, i) => (
-          <Slot key={i} slot={s} />
-        ))}
+      <div className="flex flex-col gap-[2px]">
+        <div className="grid grid-cols-3 gap-[2px]">
+          {grid.map((s, i) => (
+            <Slot key={i} slot={s} />
+          ))}
+        </div>
+        <div className="text-[10px] text-[#b8b8b8] leading-tight px-[2px]">
+          <div>Cap:</div>
+          <div>{character.cap}</div>
+        </div>
       </div>
       <div className="flex flex-col gap-[2px] flex-1">
         <div className="grid grid-cols-2 gap-[2px]">
@@ -78,18 +82,6 @@ export function QuickInventory() {
         <button className="tibia-btn text-[10px]" style={{ height: 14 }}>Quests</button>
         <button className="tibia-btn text-[10px]" style={{ height: 14 }}>Options</button>
         <button className="tibia-btn text-[10px]" style={{ height: 14 }}>Logout</button>
-      </div>
-      <div
-        className="absolute"
-        style={{
-          fontSize: 10,
-          color: "#b8b8b8",
-          lineHeight: 1.1,
-        }}
-      />
-      <div className="text-[10px] text-[#b8b8b8] leading-tight self-end" style={{ position: "absolute", left: 4, marginTop: 96 }}>
-        <div>Cap:</div>
-        <div>{character.cap}</div>
       </div>
     </div>
   );
