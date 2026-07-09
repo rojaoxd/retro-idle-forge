@@ -1,104 +1,48 @@
-# Plano: Cliente estilo Tibia 7.4
+## Status
 
-Objetivo: layout 100% fiel ao screenshot (chrome cinza escuro, coluna direita fixa, minimapa no topo, barras HP/MP, grid de slots de equipamento, abas Skills/Battle/VIP/Analyz./Bestiary/Stash/Hotkeys, painel Skills com stats, chat inferior com abas Default/Server Log, canvas de mapa central). Sprites virão depois — usar placeholders com posicionamento/proporções idênticas. Dados via Zustand (sem Supabase por ora). Gameplay entra em fases seguintes.
+O build atual (`bun run build:dev`) passa sem erros — o log de falha reportado é de um turno anterior, antes do ajuste de cores. Nada a corrigir no build.
 
-## Fase 1 — Layout fiel (esta etapa)
+O ajuste de cores do painel (tokens `--tibia-*`, bevel, HP/MP, botão Store, tabs) já foi aplicado no turno anterior e está no ar.
 
-Substituir o `GameShell` atual (estilo RPG "bevel dourado") por um chrome escuro fiel ao Tibia clássico.
+## Próximo passo sugerido: refinamento visual "100% igual"
 
-### Estrutura (grid)
+Para chegar mais perto do print do Tibia 7.4, proponho um segundo passe focado em detalhes que ainda destoam da referência:
 
-```text
-+----------------------------------------------+-------------+
-|                                              |  Minimap    |
-|                                              +-------------+
-|                                              | HP bar      |
-|                                              | MP bar      |
-|              GAME CANVAS                     +-------------+
-|          (viewport 15x11 tiles)              | Inv slots   |
-|          top-left: FPS / Latency             | (2 col x 5) |
-|                                              +-------------+
-|                                              | Store/Vip   |
-|                                              +-------------+
-|                                              | Skills tabs |
-|                                              | (Skills/    |
-|                                              |  Battle/VIP)|
-|                                              +-------------+
-|                                              | Skills list |
-+----------------------------------------------+-------------+
-| Chat tabs: Default | Server Log                            |
-| Chat log area                                              |
-| [ Say input ..........................  ] [ Chat on ]      |
-+------------------------------------------------------------+
-```
+1. **Janela "Skills" — barra de título**
+   - Fundo cinza claro `#c0c0c0` com texto preto (não cinza escuro com verde).
+   - Ícone verde `◆` à esquerda + botões `_` e `×` à direita no estilo Windows 98.
 
-### Componentes a criar (`src/components/tibia/`)
+2. **Abas Skills/Battle/Vip/Analyz + Bestiary/Stash/Hotkeys**
+   - Cada aba com ícone colorido próprio (coração vermelho, espadas cruzadas, estrela azul, lupa, dragão, baú, teclado) em vez de só texto.
+   - Aba ativa "afunda" (inset) em vez de só clarear.
 
-- `TibiaShell.tsx` — grid principal, fundo `#000`, borda dupla cinza.
-- `GameViewport.tsx` — canvas central (aspect 15:11), overlay FPS/Latency vermelho no canto sup. esquerdo, nome do char verde acima do sprite.
-- `sidebar/Minimap.tsx` — janela "Minimap" com título, botão Centre, 4 setas de navegação, botões +/- zoom.
-- `sidebar/VitalsBars.tsx` — HP (vermelho) 150 e MP (azul) 0, com números à direita.
-- `sidebar/QuickInventory.tsx` — grid 3 colunas de slots quadrados (helmet, amulet, backpack, weapon, armor, shield, ring, legs, boots) + coluna direita com ícones auxiliares (ammo, stop/follow modes, PvP, Quests, Options, Logout) + "Cap: 336".
-- `sidebar/StoreVipRow.tsx` — botão verde "Store" e ícone VIP.
-- `sidebar/SkillsPanel.tsx` — abas topo: Skills / Battle / Vip / Analyz., segunda linha: Bestiary / Stash / Hotkeys. Conteúdo "Skills" com lista: Exp, Level, Hitpoints, Mana, Speed, Capacity, Food, Stamina, Magic Level, Fist/Club/Sword/Axe/Distance Fighting, Shielding, Fishing.
-- `chat/ChatDock.tsx` — abas Default / Server Log, log com timestamps `HH:MM` amarelos + texto vermelho para system, input "Say..." + botão "Chat on".
+3. **Barras HP/MP**
+   - Altura 12 px, sem ícone colorido do lado (a referência não tem — é só a barra ocupando a largura toda com o número à direita).
+   - Cor HP `#c00000` chapado, MP `#0000c8` chapado.
 
-### Estilos (`src/styles.css`)
+4. **Grid de equipamento (QuickInventory)**
+   - Cada slot com sprite fantasma cinza da peça (helm, colar, mochila, arma, armadura, escudo, anel, munição, calça, bota) — placeholder SVG monocromático.
+   - Coluna direita com ícones auxiliares corretos: stop/follow, chase/stand, offensive/balanced/defensive, PvP com cores (branco/amarelo/vermelho).
+   - "Cap: 336" alinhado embaixo à esquerda.
 
-Adicionar tokens Tibia-clássicos preservando os atuais (fase 2 do jogo pode reutilizar):
+5. **Chat**
+   - Aba "Server Log" com texto vermelho `#c03030` mesmo quando inativa (como na referência).
+   - Timestamps `#c0c000` + mensagens system em `#c03030` (já OK).
+   - Área de log com fundo `#000` puro e borda inset fina.
 
-```css
---tibia-bg: #000;
---tibia-panel: #444;
---tibia-panel-dark: #222;
---tibia-border-light: #888;
---tibia-border-dark: #111;
---tibia-text: #c0c0c0;
---tibia-text-dim: #909090;
---tibia-hp: #c03030;
---tibia-mp: #3060c0;
---tibia-accent-green: #40a040;
---tibia-timestamp: #c0c000;
---tibia-system: #c03030;
-```
+6. **Minimap**
+   - Título "Minimap" no mesmo estilo da janela Skills.
+   - Botão "Centre" verde escuro `#2a6f2a` (não cinza).
+   - Setas de navegação em um pad 3×3 mais compacto (28 px por botão).
 
-Utilitários novos: `tibia-bevel` (borda em relevo cinza), `tibia-inset` (afundado), `tibia-tab` / `tibia-tab-active`. Fonte da UI: Verdana/Tahoma 11px (system-ui fallback) — a fonte pixel atual fica só para o canvas.
-
-### Estado (`src/stores/tibiaStore.ts`)
-
-Novo store enxuto (mantém o atual `gameStore` intocado por enquanto):
-- `character`: name, level, exp, hp/hpMax, mana/manaMax, cap, capMax, speed, food, stamina, magicLevel
-- `skills`: fist, club, sword, axe, distance, shielding, fishing (valor + progresso)
-- `inventory`: 10 slots equipáveis
-- `chat`: canais `default | serverLog`, mensagens `{ ts, type: 'system'|'say'|'info', text }`
-- Mensagens seed idênticas: `We hope you enjoy our game!`, `Website: https://mythera74.com`, `Discord: ...`, `Wiki: ...`
-
-### Rota
-
-`src/routes/index.tsx` passa a renderizar `<TibiaShell />` (o antigo `GameShell` fica no repo para referência mas não é montado).
-
-## Fase 2 — Mapa navegável (próxima etapa, plano separado)
-
-Mapa tile-based 32px, viewport 15x11, movimento por WASD/setas, colisão, minimapa refletindo posição do jogador, sistema de sprites carregáveis via `src/assets/tibia/` (assim que você enviar).
-
-## Fase 3 — Gameplay (etapas seguintes)
-
-Combate por turnos client-side, uso de itens do inventário, chat funcional entre canais, skills subindo com uso, save opcional no Supabase depois.
+7. **Área central (viewport)**
+   - Fundo `#000` puro com borda inset cinza escura ao redor (a referência tem uma moldura clara ao redor do canvas do jogo).
+   - Remover o grid xadrez placeholder — deixar só preto até os sprites reais chegarem.
 
 ## Detalhes técnicos
 
-- Sem Supabase nesta fase; store 100% local (Zustand já instalado).
-- Sem novas dependências.
-- Manter build TanStack Start passando: rota única `/`, `__root.tsx` intocado a não ser pelo `<title>` ("Mythera 7.4").
-- Placeholders: quadrados `#2a2a2a` com borda `#555` no lugar dos sprites; personagem = quadrado amarelo com nome verde acima; minimapa = `<canvas>` com ruído verde/marrom procedural.
-- Não remover arquivos antigos ainda — trocar apenas o que a rota `/` renderiza, para permitir reverter fácil.
+- Alterações só em CSS (`src/styles.css`) e nos componentes em `src/components/tibia/**` — nenhum arquivo novo.
+- Placeholders de sprites usam SVG inline monocromático (sem novas dependências, sem assets binários).
+- Verificação final: screenshot Playwright em 1600×900 comparado lado-a-lado com `user-uploads://image-3.png`.
 
-## Entregáveis desta etapa
-
-1. Novos arquivos em `src/components/tibia/*` e `src/stores/tibiaStore.ts`.
-2. Tokens + utilitários Tibia em `src/styles.css`.
-3. `src/routes/index.tsx` renderizando `TibiaShell`.
-4. Título "Mythera 7.4" em `__root.tsx`.
-5. Screenshot Playwright do preview para comparar lado-a-lado com sua imagem antes de encerrar.
-
-Confirma que posso partir para a Fase 1 assim?
+Aprovando, aplico esse segundo passe.
