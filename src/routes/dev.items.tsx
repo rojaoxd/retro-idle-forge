@@ -123,7 +123,9 @@ function ItemsPage() {
                 }}
               >
                 <span className="flex-1 truncate">{r.name}</span>
-                {r.sprite_id && <span className="text-[10px] text-slate-500">#{r.sprite_id}</span>}
+                <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[9px] uppercase text-slate-400">
+                  {TYPE_LABELS[(r.item_type ?? "misc") as Item["item_type"]]}
+                </span>
               </button>
             ))}
             {filtered.length === 0 && (
