@@ -1,14 +1,16 @@
 export function StoreVipRow() {
   return (
-    <div className="tibia-bevel bg-[color:var(--tibia-panel)] p-1 flex items-center gap-1">
+    <div className="tibia-bevel p-1 flex items-center gap-1">
       <button
-        className="tibia-btn flex-1 flex items-center justify-center gap-1 font-bold"
+        className="flex-1 flex items-center justify-center gap-1 font-bold"
         style={{
-          background: "linear-gradient(180deg,#4fa04f,#2a6f2a)",
+          background: "var(--tibia-store)",
           color: "#fff",
           textShadow: "1px 1px 0 #000",
           fontSize: 11,
           height: 22,
+          boxShadow:
+            "inset 1px 1px 0 0 #a0e0a0, inset -1px -1px 0 0 #204020",
         }}
       >
         <span
@@ -22,6 +24,7 @@ export function StoreVipRow() {
             justifyContent: "center",
             borderRadius: 2,
             fontSize: 10,
+            fontWeight: 900,
           }}
         >
           M
@@ -38,3 +41,4 @@ export function StoreVipRow() {
     </div>
   );
 }
+
