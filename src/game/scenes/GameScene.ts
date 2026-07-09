@@ -59,10 +59,22 @@ export class GameScene extends Phaser.Scene {
       console.warn("[GameScene] loaderror:", file.key, file.src);
     });
     this.load.image(TILESET_IMAGE_KEY, TILESET_IMAGE_URL);
-    this.load.tilemapTiledJSON("mapa", MAP_URL);
+    // Carrega como JSON puro para ignorar qualquer "image" interna do .tmj
+    // (evita Phaser tentar buscar o tileset num path do computador do autor).
+    this.load.json("mapa-json", MAP_URL);
     this.load.on(`filecomplete-image-${TILESET_IMAGE_KEY}`, () => (this.hasTilesetImage = true));
-    this.load.on("filecomplete-tilemapTiledJSON-mapa", () => (this.hasTiledMap = true));
+    this.load.on("filecomplete-json-mapa-json", () => {
+      const raw = this.cache.json.get("mapa-json");
+      if (raw) {
+        this.cache.tilemap.add("mapa", {
+          format: Phaser.Tilemaps.Formats.TILED_JSON,
+          data: raw,
+        });
+        this.hasTiledMap = true;
+      }
+    });
   }
+
 
   create() {
     this.cameras.main.setBackgroundColor("#000000");
