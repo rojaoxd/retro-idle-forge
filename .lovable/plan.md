@@ -1,63 +1,33 @@
-# Página /auth — Login e Registro com Nome do Personagem
+# Plano: Carregar mapa Tiled + sprites no Phaser
 
-## Objetivo
-Criar a rota pública `/auth` para autenticação no jogo. No registro, o jogador escolhe o **nome do personagem** (único).
+## Arquivos enviados
+- `firstglobalmapa.tmj` — mapa Tiled 50×50 tiles, tile 32×32, tileset `cenario` (imagem `nlbWl37.png`, 3×3 tiles, 9 tiles totais).
+- `nlbWl37.png` — spritesheet do cenário.
 
-## Banco de dados (migration)
-Hoje não existe tabela de perfil/personagem. Criar:
+## Passos
 
-**`public.profiles`**
-- `id uuid PK` → referencia `auth.users(id)` on delete cascade
-- `character_name text not null unique` (case-insensitive via índice `lower(character_name)`, 3–20 chars, regex `^[A-Za-z0-9_]+$`)
-- `created_at`, `updated_at` + trigger
+1. **Copiar assets para `public/assets/`** (servidos em `/assets/...`):
+   - `firstglobalmapa.tmj` → `public/assets/mapa.json`
+   - `nlbWl37.png` → `public/assets/sprites.png` (o `.tmj` já referencia `nlbWl37.png`, então vou salvar a imagem com esse nome também — `public/assets/nlbWl37.png` — e ajustar o loader para carregar pelo nome que o Tiled espera).
 
-RLS:
-- SELECT: `authenticated` pode ler seu próprio perfil (`id = auth.uid()`); admins leem tudo via `has_role`.
-- INSERT/UPDATE: apenas o dono (`id = auth.uid()`).
-- GRANT para `authenticated` e `service_role`.
+2. **Ajustar `src/game/scenes/GameScene.ts`**:
+   - Trocar `SPRITES_URL` para `/assets/nlbWl37.png` e registrar o tileset com a chave `cenario` (que é o `name` do tileset no `.tmj`), casando com `map.addTilesetImage("cenario", "cenario")`.
+   - Simplificar `buildWorld()`: assumir que o Tiled map carrega (mantendo fallback só se `hasTiledMap` for false).
+   - Centralizar/limitar a câmera nos bounds do mapa (50×32 = 1600px de largura, 50×32 de altura) e fazer follow do container do player local.
+   - Aumentar zoom (`cameras.main.setZoom(2)`) para ficar legível no viewport atual.
 
-Validação de nome (formato + tamanho) via **trigger** `BEFORE INSERT/UPDATE` (não CHECK, seguindo convenção do projeto).
+3. **Colyseus (`src/net/colyseus.ts` + `PhaserCanvas.tsx`)** — já está conectando em `ws://54.233.23.67:2567`, sala `game`, e sincronizando `x`/`y` via `room.send("move", {x, y})` com interpolação. Nada a mudar aqui além de garantir que o input use tiles de 32px (já usa) e que a câmera siga o player local.
 
-## Rota `/auth` (`src/routes/auth.tsx`)
-Pública, SSR default. Se já autenticado, redireciona para `/` (ou `search.redirect`).
+4. **Substituir `GameCanvas` placeholder por `PhaserCanvas`** dentro do `GameShell` (ou verificar qual shell a rota `/` renderiza — `TibiaShell` usa `GameViewport`; conferir e trocar o mount para `PhaserCanvas` no viewport ativo).
 
-UI com dois modos (tabs "Entrar" / "Criar conta"):
+## Detalhes técnicos
 
-**Entrar**
-- Campos: email, senha
-- `supabase.auth.signInWithPassword`
-- Após sucesso → `navigate({ to: search.redirect ?? "/" })`
-
-**Criar conta**
-- Campos: email, senha, **nome do personagem**
-- Valida nome no cliente (zod: 3–20, `^[A-Za-z0-9_]+$`)
-- `supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } })`
-- Após sessão ativa, `insert` em `profiles { id: user.id, character_name }`
-  - Se colidir (unique violation) → mostra erro "Nome já em uso" e permite reescolher (mantém sessão; usuário pode tentar de novo sem re-signup).
-- Feedback via `toast` (sonner já usado no projeto).
-
-Search param: `redirect?: string` (validado como path relativo).
-
-## Integração com `/dev`
-Fluxo atual já checa admin via `checkIsAdmin`. Sem mudanças além de:
-- No topo do painel dev (ou em `dev.tsx`), se não autenticado, link para `/auth`.
-- (Opcional, fora deste escopo) mover `/dev` para `_authenticated/` no futuro.
-
-## Estilo
-Reusar tokens dark/emerald já definidos em `src/styles.css`. Card centralizado, tabs shadcn, inputs shadcn, botão emerald.
-
-## Metadata
-`head()` com título "Entrar — Retro Idle Forge" e description curta; `robots: noindex`.
-
-## Arquivos a criar/alterar
-- **Migration**: tabela `profiles` + RLS + trigger de validação + trigger updated_at.
-- **Novo**: `src/routes/auth.tsx`.
-- (Sem alterações em server functions — signup/login usam o client Supabase no browser.)
+- Tiled JSON com `firstgid:1` → Phaser mapeia tile index `data[i] - 1` para frame do tileset (3 colunas × 3 linhas).
+- `map.addTilesetImage(tilesetName, imageKey)` — o `tilesetName` deve bater com `"cenario"` do `.tmj`; o `imageKey` é o que registramos no `this.load.image(...)`.
+- Sem colisão nesta iteração — só render + movimento livre em grid de 32px, servidor autoritativo via Colyseus.
+- Não mexer em CRUD, auth, nem outros painéis.
 
 ## Fora de escopo
-- Recuperação de senha (`/reset-password`).
-- OAuth (Google/Apple).
-- Múltiplos personagens por conta (1 conta = 1 personagem por enquanto).
-- Auto-desbloquear/logout dentro do `/dev` (permanece como está).
-
-Confirmar antes de implementar?
+- Colisão por tile.
+- Animações de sprite do personagem (continua retângulo colorido com nick).
+- Editor de mapa no /dev.
