@@ -231,3 +231,29 @@
 }
 
 
+
+/* ============ Dev panel tokens ============ */
+:root {
+  --dev-bg: #0b1120;
+  --dev-surface: #111827;
+  --dev-surface-2: #1f2937;
+  --dev-border: #334155;
+  --dev-text: #e2e8f0;
+  --dev-text-dim: #94a3b8;
+  --dev-accent: #10b981;     /* emerald */
+  --dev-accent-2: #38bdf8;   /* sky */
+  --dev-danger: #ef4444;
+}
+
+@utility dev-panel {
+  background-color: var(--dev-surface);
+  border: 1px solid var(--dev-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 0 0 rgba(255,255,255,0.03) inset, 0 8px 24px rgba(0,0,0,0.35);
+}
+
+@utility dev-inset {
+  background-color: #0f172a;
+  border: 1px solid var(--dev-border);
+  border-radius: 0.375rem;
+}
