@@ -171,9 +171,10 @@ export class GameScene extends Phaser.Scene {
         if (!v) return;
         // Se o alvo do servidor bate com o tween em andamento (predição local),
         // não recria; senão, faz tween linear até a nova posição autoritativa.
-        const currentTargetX = v.tween ? (v.tween.data[0]?.end as number) : v.container.x;
-        const currentTargetY = v.tween ? (v.tween.data[1]?.end as number) : v.container.y;
-        if (Math.round(currentTargetX) !== Math.round(p.x) || Math.round(currentTargetY) !== Math.round(p.y)) {
+        const data = v.tween?.data as Array<{ key: string; end: number }> | undefined;
+        const targetX = data?.find((d) => d.key === "x")?.end ?? v.container.x;
+        const targetY = data?.find((d) => d.key === "y")?.end ?? v.container.y;
+        if (Math.round(targetX) !== Math.round(p.x) || Math.round(targetY) !== Math.round(p.y)) {
           this.moveTo(v, p.x, p.y);
         }
         if (sessionId === this.room.sessionId && this.lastMoveSentAt > 0) {
