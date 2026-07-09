@@ -2,11 +2,12 @@ import Phaser from "phaser";
 import type { Room } from "colyseus.js";
 
 const TILE = 32;
-const MOVE_COOLDOWN_MS = 150;
+// Tibia 7.4: caminhada base em chão normal ~500ms/SQM.
+const STEP_MS = 500;
 const MAP_URL = "/assets/mapa.json";
 const TILESET_IMAGE_URL = "/assets/nlbWl37.png";
 const TILESET_IMAGE_KEY = "cenario";
-const TILESET_NAME = "cenario"; // deve bater com o "name" do tileset no .tmj
+const TILESET_NAME = "cenario";
 
 type PlayerLike = { x: number; y: number; name: string };
 type PlayersMap = {
@@ -18,9 +19,11 @@ type PlayersMap = {
 
 type PlayerVisual = {
   container: Phaser.GameObjects.Container;
-  target: { x: number; y: number };
   label: Phaser.GameObjects.Text;
+  tween: Phaser.Tweens.Tween | null;
 };
+
+type Direction = "up" | "down" | "left" | "right";
 
 export type GameSceneInit = {
   room: Room;
@@ -87,12 +90,10 @@ export class GameScene extends Phaser.Scene {
           this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
           return;
         }
-        console.warn("[GameScene] addTilesetImage retornou null");
       } catch (e) {
         console.warn("[GameScene] Tiled map falhou, usando fallback:", e);
       }
     }
-    // Fallback procedural
     const g = this.add.graphics();
     for (let y = 0; y < 50; y++) {
       for (let x = 0; x < 50; x++) {
@@ -107,6 +108,28 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.cameras.main.setBounds(0, 0, 50 * TILE, 50 * TILE);
+  }
+
+  private moveTo(vis: PlayerVisual, x: number, y: number, instant = false) {
+    if (vis.tween) {
+      vis.tween.stop();
+      vis.tween = null;
+    }
+    if (instant) {
+      vis.container.x = x;
+      vis.container.y = y;
+      return;
+    }
+    vis.tween = this.tweens.add({
+      targets: vis.container,
+      x,
+      y,
+      duration: STEP_MS,
+      ease: "Linear",
+      onComplete: () => {
+        vis.tween = null;
+      },
+    });
   }
 
   private wireRoom() {
@@ -132,7 +155,8 @@ export class GameScene extends Phaser.Scene {
       });
       label.setOrigin(0.5, 0.5);
       container.add([rect, label]);
-      this.players.set(sessionId, { container, target: { x: p.x, y: p.y }, label });
+      const vis: PlayerVisual = { container, label, tween: null };
+      this.players.set(sessionId, vis);
 
       if (isMe) {
         this.cameras.main.startFollow(container, true, 0.15, 0.15);
@@ -143,10 +167,16 @@ export class GameScene extends Phaser.Scene {
         listen?: (field: string, cb: (v: unknown) => void) => void;
       };
       const update = () => {
-        const vis = this.players.get(sessionId);
-        if (!vis) return;
-        vis.target.x = p.x;
-        vis.target.y = p.y;
+        const v = this.players.get(sessionId);
+        if (!v) return;
+        // Se o alvo do servidor bate com o tween em andamento (predição local),
+        // não recria; senão, faz tween linear até a nova posição autoritativa.
+        const data = v.tween?.data as Array<{ key: string; end: number }> | undefined;
+        const targetX = data?.find((d) => d.key === "x")?.end ?? v.container.x;
+        const targetY = data?.find((d) => d.key === "y")?.end ?? v.container.y;
+        if (Math.round(targetX) !== Math.round(p.x) || Math.round(targetY) !== Math.round(p.y)) {
+          this.moveTo(v, p.x, p.y);
+        }
         if (sessionId === this.room.sessionId && this.lastMoveSentAt > 0) {
           this.onLatency?.(Math.max(1, Date.now() - this.lastMoveSentAt));
           this.lastMoveSentAt = 0;
@@ -161,22 +191,20 @@ export class GameScene extends Phaser.Scene {
 
     const removePlayer = (_p: PlayerLike, sessionId: string) => {
       const v = this.players.get(sessionId);
-      v?.container.destroy();
+      if (v) {
+        v.tween?.stop();
+        v.container.destroy();
+      }
       this.players.delete(sessionId);
     };
 
+    // Registra listeners ANTES do forEach para não perder ninguém.
     players.onAdd(addPlayer);
     players.onRemove(removePlayer);
     players.forEach(addPlayer);
   }
 
   update(_time: number, deltaMs: number) {
-    this.players.forEach((v) => {
-      const c = v.container;
-      c.x += (v.target.x - c.x) * 0.25;
-      c.y += (v.target.y - c.y) * 0.25;
-    });
-
     this.fpsTimer += deltaMs;
     if (this.fpsTimer > 500) {
       this.fpsTimer = 0;
@@ -190,20 +218,34 @@ export class GameScene extends Phaser.Scene {
     const state = this.room.state as { players?: PlayersMap };
     const me = state.players?.get(this.room.sessionId);
     if (!me) return;
+    const myVis = this.players.get(this.room.sessionId);
+    if (!myVis) return;
 
+    let dir: Direction | null = null;
     let dx = 0;
     let dy = 0;
-    if (this.cursors.left.isDown || this.wasd.A.isDown) dx = -1;
-    else if (this.cursors.right.isDown || this.wasd.D.isDown) dx = 1;
-    else if (this.cursors.up.isDown || this.wasd.W.isDown) dy = -1;
-    else if (this.cursors.down.isDown || this.wasd.S.isDown) dy = 1;
+    if (this.cursors.left.isDown || this.wasd.A.isDown) {
+      dir = "left";
+      dx = -1;
+    } else if (this.cursors.right.isDown || this.wasd.D.isDown) {
+      dir = "right";
+      dx = 1;
+    } else if (this.cursors.up.isDown || this.wasd.W.isDown) {
+      dir = "up";
+      dy = -1;
+    } else if (this.cursors.down.isDown || this.wasd.S.isDown) {
+      dir = "down";
+      dy = 1;
+    }
 
-    if (dx || dy) {
+    if (dir) {
       const nx = me.x + dx * TILE;
       const ny = me.y + dy * TILE;
       this.lastMoveSentAt = Date.now();
-      this.room.send("move", { x: nx, y: ny });
-      this.nextMoveAt = this.time.now + MOVE_COOLDOWN_MS;
+      this.room.send("move", { direction: dir });
+      // Predição local: já desliza o container do jogador local.
+      this.moveTo(myVis, nx, ny);
+      this.nextMoveAt = this.time.now + STEP_MS;
     }
   }
 }
