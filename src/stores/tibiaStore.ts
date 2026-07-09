@@ -58,6 +58,8 @@ type State = {
   setChat: (c: ChatChannel) => void;
   toggleChat: () => void;
   sendChat: (text: string) => void;
+  setFps: (fps: number) => void;
+  setLatency: (ms: number) => void;
 };
 
 const now = () => {
@@ -129,4 +131,6 @@ export const useTibiaStore = create<State>((set) => ({
         },
       ],
     })),
+  setFps: (fps) => set((s) => ({ server: { ...s.server, fps } })),
+  setLatency: (ms) => set((s) => ({ server: { ...s.server, latency: ms } })),
 }));
