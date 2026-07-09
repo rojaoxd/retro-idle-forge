@@ -131,4 +131,6 @@ export const useTibiaStore = create<State>((set) => ({
         },
       ],
     })),
+  setFps: (fps) => set((s) => ({ server: { ...s.server, fps } })),
+  setLatency: (ms) => set((s) => ({ server: { ...s.server, latency: ms } })),
 }));

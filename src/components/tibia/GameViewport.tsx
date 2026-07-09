@@ -1,4 +1,6 @@
 import { useTibiaStore } from "@/stores/tibiaStore";
+import { PhaserCanvas } from "./PhaserCanvas";
+import { useNetStore } from "@/stores/netStore";
 
 export function GameViewport() {
   const { server, character } = useTibiaStore();
