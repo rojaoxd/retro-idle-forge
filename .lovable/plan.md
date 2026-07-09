@@ -1,129 +1,198 @@
-# Painel Admin Definitivo `/dev` — Database-Driven
 
-Vou expandir o painel `/dev` atual (já tem Sprites, Map Editor, Items, Creatures, Spells, Config) para um dashboard SaaS-gamer completo, com nova aba **Overview & Controle**, refactor das abas existentes para o escopo pedido, e novas tabelas no Supabase.
+# Upgrade `/dev` — Workflow OTServ 7.4 Profissional
 
-## 1. Migrações Supabase (novas tabelas + colunas)
+Objetivo: transformar o painel atual em substituto completo de Tiled + Object Builder + Remere's Map Editor + scripts do OTServ, mantendo o dark mode SaaS atual.
 
-### `server_configs` (nova, single-row pattern)
-- `id` (int, pk, default 1, check =1)
-- `status` (text: `'online' | 'maintenance'`)
-- `motd` (text, opcional — mensagem do dia)
-- `updated_at`, `updated_by` (uuid → auth.users)
-- RLS: `SELECT` público (anon+auth), `UPDATE` só admin (via `has_role`). Realtime ON.
+---
 
-### `online_players` (nova)
-- `id` (uuid pk), `user_id` (uuid, unique), `character_name` (text)
-- `x`, `y` (int), `last_heartbeat` (timestamptz)
-- RLS: `SELECT` admin only, `UPSERT/DELETE` service_role (Colyseus). Realtime ON.
-- Contador via `SELECT count(*) WHERE last_heartbeat > now()-30s`.
+## 1. Nova arquitetura de dados (Supabase)
 
-### `server_logs` (nova)
-- `id` (uuid pk), `created_at` (timestamptz, index desc)
-- `level` (text: `info|warn|error|debug`)
-- `source` (text: ex. `colyseus`, `auth`, `admin`)
-- `message` (text), `meta` (jsonb)
-- RLS: `SELECT` admin only, `INSERT` service_role. Realtime ON.
-- Retenção: cron/manual truncate (fora do escopo agora).
+Migração única com as tabelas / colunas abaixo (todas com RLS admin-only para escrita, SELECT autenticado, `service_role` ALL, triggers `set_updated_at`).
 
-### `monsters` (nova — separada de `game_creatures` que é só sprite/outfit)
-- `id` (uuid pk), `name`, `hp` (int), `speed` (int)
-- `exp_reward` (int), `max_damage` (int)
-- `sprite_id` (int → `game_sprites`)
-- `loot_table` (jsonb: `[{item_id, chance, min, max}]`)
-- RLS: `SELECT` público, CRUD admin.
+### Sprites & Objetos (estilo `.dat` do Tibia)
+- **`game_sprites`** (já existe) — adicionar `hash` (dedup), `palette_group` (nature/town/dungeon/walls/creatures/items/effects).
+- **`game_objects`** (nova) — o "item .dat":
+  - `client_id` (int, único — equivalente ao ID do OTB)
+  - `name`, `object_kind` (`item`|`ground`|`container`|`weapon`|`armor`|`fluid`|`splash`|`deco`)
+  - `width`, `height` (tiles: 1×1, 1×2, 2×1, 2×2)
+  - `layers`, `pattern_x`, `pattern_y`, `pattern_z`, `frames` (animação)
+  - `frame_duration_ms`
+  - `flags` (jsonb) — `isSolid, isBlockProjectile, isBlockPath, isContainer, isStackable, isUseable, isPickupable, isRotatable, isHangable, isHorizontal, isVertical, hasLight, lightLevel, lightColor, hasHeight, elevation, hasOffset, offsetX, offsetY, isLyingCorpse, isAnimateAlways, minimapColor, isFullGround, isTop, isBottom`
+- **`game_object_sprites`** (nova, join) — mapeia cada célula do objeto:
+  - `object_id` FK, `sprite_id` FK, `layer`, `pattern_x`, `pattern_y`, `pattern_z`, `frame`, `cell_x`, `cell_y`
 
-### `vocations` (nova)
-- `id` (uuid pk), `name` (text unique)
-- `hp_per_level`, `mana_per_level`, `capacity_per_level` (int)
-- `hp_regen_ms`, `mana_regen_ms` (int)
-- RLS: `SELECT` público, CRUD admin.
+### Mapa com eixo Z
+- **`map_tiles`** — adicionar `z smallint NOT NULL DEFAULT 7` (0=topo, 15=mais fundo; convenção Tibia usa 7 como superfície) e alterar unique/index para `(x, y, z, layer)`. Substituir `tile_id` por `object_id` (FK → `game_objects.id`) e manter `tile_id` legado por transição.
+- **`map_palettes`** (nova) — `id, name, group` (nature/town/…) e `object_ids int[]` para as paletas de criação.
+- **`map_areas`** (nova) — regiões nomeadas: `id, name, x1, y1, x2, y2, z_min, z_max, kind` (city/dungeon/pvp/nopvp/nologout).
 
-### `spells` (nova)
-- `id` (uuid pk), `name` (text), `words` (text unique — ex. `exura`)
-- `mana_cost` (int), `min_level` (int)
-- `vocation_id` (uuid → vocations, nullable = todas)
-- `kind` (text: `healing|attack|support|rune`)
-- `effect_id` (uuid → `game_visual_effects`, nullable)
-- RLS: `SELECT` público, CRUD admin.
+### Actions & Movements (scripts)
+- **`scripts_actions`** — `id, name, target_kind` (`item_id`|`action_id`|`unique_id`), `target_value int`, `code text` (Lua-like ou JS), `enabled`, `notes`.
+- **`scripts_movements`** — `id, name, target_kind` (`tile_object_id`|`action_id`|`unique_id`|`equip_slot`), `target_value int`, `event` (`onStepIn`|`onStepOut`|`onEquip`|`onDeEquip`|`onAddItem`|`onRemoveItem`), `code text`, `enabled`.
 
-### `items` (extensão — reusar `game_items` existente)
-- Já tem name, attack, defense, weight, sprite_id, weapon_type. Adicionar:
-- `item_type` (text: `weapon|armor|rune|fluid|misc`) — coluna nova.
-- CRUD já existe em `/dev/items`, será revisto pra bater com o escopo.
+### NPCs & Quests
+- **`npcs`** — `id, name, sprite_object_id`, `outfit` (jsonb: head/body/legs/feet/addons), `walk_radius`, `speech_greet text[]`, `speech_farewell text[]`, `idle_messages text[]`.
+- **`npc_trades`** — `id, npc_id, object_id, buy_price, sell_price, currency` (default gold), `stock` (null=infinito).
+- **`npc_keywords`** — `id, npc_id, keyword text[], answer text` (respostas a palavras-chave).
+- **`quests`** — `id, name, description, storage_key text, storage_value int, min_level`.
+- **`quest_steps`** — `id, quest_id, order, kind` (`talk`|`kill`|`collect`|`reach_tile`), `params jsonb`, `reward jsonb`.
 
-### `map_tiles` (extensão)
-- Adicionar `spawn_monster_id` (uuid → monsters, nullable). Quando não-null, o tile é ponto de spawn.
-- Layer ganha valor `'spawn'` além de `'floor'|'obstacles'`.
+Todas com GRANTs corretos + RLS (`has_role(auth.uid(),'admin')` para escrita).
 
-Todas com `set_updated_at()` trigger e GRANTs explícitos (`authenticated`+`service_role`; `anon` só onde SELECT for público).
+---
 
-## 2. Layout do Painel
+## 2. Reformulação `/dev/sprites` — Object Builder
 
-Sidebar reorganizada (`DevSidebar.tsx`):
+Layout 3 colunas:
 
-```
-Engine Console
-├── Overview            (novo — home do /dev)
-├── Mapa & Spawns       (rename de Map Editor)
-├── Itens & Equipamentos
-├── Criaturas (Monstros) (novo — separado de Outfits)
-├── Outfits & Sprites   (merge de Sprites + Outfits atuais)
-├── Vocações & Magias   (novo)
-└── Config Global
+```text
+┌─────────────┬────────────────────────┬──────────────┐
+│ Sprite Pool │  Object Composer       │  Flags &     │
+│ (drag src)  │  (grid W×H×frames)     │  Attributes  │
+│  + upload   │                        │              │
+│  DnD zone   │  timeline (frames)     │  Preview     │
+└─────────────┴────────────────────────┴──────────────┘
 ```
 
-Redirect `/dev` → `/dev/overview` (era `/dev/sprites`).
+- **Drag & Drop inteligente**: zona no topo do Sprite Pool aceita PNG/sheets soltos. Detecta automaticamente tamanho múltiplo de 32 → propõe grid de fatiamento (`cols × rows`) com preview antes de gravar. Hash SHA-256 evita reuploads.
+- **Object Composer**: novo objeto define `width × height` (1×1 → 2×2), `layers`, `frames`. Cada célula é um dropzone que aceita sprite arrastado do Pool. Timeline embaixo permite navegar entre frames e patterns.
+- **Flags panel**: replica o `.dat` do Tibia (checkboxes agrupados: Blocking, Container, Stack/Use, Light, Height/Offset, Minimap). Cada flag afeta o preview em tempo real (ex.: `hasHeight` sobe 8 px na visualização).
+- Salva em `game_objects` + `game_object_sprites`.
 
-## 3. Telas
+Arquivos:
+- `src/routes/dev.sprites.tsx` (reescrita)
+- `src/components/dev/objectbuilder/SpritePool.tsx`
+- `src/components/dev/objectbuilder/ObjectComposer.tsx`
+- `src/components/dev/objectbuilder/FlagsPanel.tsx`
+- `src/components/dev/objectbuilder/DropUploader.tsx`
+- `src/lib/dev/objects.functions.ts`
 
-### `/dev/overview` (novo)
-- **Grid 3-col**: `ServerStatusCard`, `OnlinePlayersCard`, `QuickStatsCard` (totais de items/monstros/tiles).
-- **ServerStatusCard**: badge Online/Maintenance + Switch grande; server fn `toggleServerStatus` (admin-only) atualiza `server_configs`. Subscribe realtime pra refletir mudanças de outros admins.
-- **OnlinePlayersCard**: número grande + sparkline últimos 5min; realtime channel em `online_players`.
-- **LiveLogsTerminal**: `<pre>` preto full-width, mono, auto-scroll, colorido por `level`. Realtime INSERT em `server_logs`, buffer últimos 200. Filtros (level, source) e botão pause.
+---
 
-### `/dev/items` (refactor)
-- Tabela com filtros por `item_type`. Modal de edit com campos: name, item_type (Select: Arma/Armadura/Runa/Fluido/Outro), attack, defense, weight, sprite (via `SpritePicker`). Campos condicionais (attack só se weapon).
+## 3. Reformulação `/dev/map` — Estilo RME
 
-### `/dev/creatures` (renomeado → Monstros)
-- Vira CRUD de `monsters`. Editor de Loot Table: linhas `[item picker | chance % | min | max] + Add`. Preview de sprite.
-- Outfits/creatures visuais movem pra `/dev/sprites` (aba interna).
+Layout:
 
-### `/dev/vocations` (novo)
-- Tabs internas: **Vocações** | **Magias**.
-- Vocações: CRUD tabular.
-- Magias: CRUD com filtro por vocação, picker de effect visual.
+```text
+┌──────────────┬──────────────────────────┬──────────────┐
+│ Paletas      │  Canvas (grid + camadas) │  Inspector   │
+│ ─ Nature     │                          │  Tile atual  │
+│ ─ Town       │  [Z: +7 ▼] [Brush 3x3 ▼] │  Object info │
+│ ─ Dungeon    │  [Fill] [Erase] [Pick]   │  Areas       │
+│ ─ Walls      │                          │              │
+│ ─ Creatures  │  ▓ silhueta Z-1 (30%)   │              │
+└──────────────┴──────────────────────────┴──────────────┘
+```
 
-### `/dev/map` (evolução)
-- Toolbar ganha 3 modos: **Paint tile** | **Toggle blocking** | **Set spawn**.
-- Modo spawn abre picker de monstro; clique grava tile com `layer='spawn'`, `spawn_monster_id=<id>`.
-- Overlay visual: ícone de caveira nos tiles de spawn, borda vermelha nos blocking.
+- **Eixo Z**: seletor de andar `-7..+7` (mapeado internamente a `z 0..15`). Renderiza somente o andar ativo em cor cheia; andares abaixo em silhueta cinza a 30 % de opacidade (composite `multiply`) quando `z_atual < 7` (subsolo mostra o de cima; superfícies mostram o de baixo — configurável).
+- **Paletas de criação**: CRUD em `map_palettes`; UI agrupa por `group`, cada paleta lista `game_objects` como thumbs draggables/clicáveis.
+- **Brushes**: toolbar com `1×1`, `3×3`, `5×5`, `Fill` (BFS 4-vias limitado ao mesmo `object_id` alvo), `Erase`, `Eyedropper (Pick)`, `Rectangle` (shift-drag), `Random paint` (para naturezas com variação).
+- **Layers do RME**: `ground`, `items` (obstacles), `top` (decor/teto), `spawn`. Toggle de visibilidade por camada.
+- **Atalhos**: `1..5` andares, `+/-` sobe/desce Z, `B` brush, `G` fill, `E` erase, `Space` pick.
+- **Áreas nomeadas** (`map_areas`): drag para desenhar retângulo, define `kind` (pvp/nopvp/…).
 
-## 4. Server Functions (novas)
+Arquivos:
+- `src/routes/dev.map.tsx` (mantém wrapper)
+- `src/components/dev/map/MapCanvas.tsx` (reescrita, canvas 2D com camadas)
+- `src/components/dev/map/PalettePanel.tsx`
+- `src/components/dev/map/BrushToolbar.tsx`
+- `src/components/dev/map/FloorSelector.tsx`
+- `src/components/dev/map/TileInspector.tsx`
+- `src/lib/dev/map.functions.ts` (bulk upsert `paintTiles(cells[])`, `fillArea`, paleta CRUD)
 
-Em `src/lib/dev/`:
-- `server.functions.ts`: `getServerStatus` (público), `setServerStatus` (admin), `getOnlinePlayersCount` (admin), `getRecentLogs(limit)` (admin), `insertLog` (service_role via `.server.ts` — pra uso interno/testes).
-- `monsters.functions.ts`: CRUD.
-- `vocations.functions.ts`: CRUD.
-- `spells.functions.ts`: CRUD.
-- `items.functions.ts` existente: adicionar `item_type`.
-- `map.functions.ts` existente: aceitar `spawn_monster_id` no upsert.
+---
 
-Todas com `requireSupabaseAuth` + assert admin (padrão já usado em `creatures.functions.ts`).
+## 4. Nova aba `/dev/scripts` — Actions & Movements
 
-## 5. Realtime
+Sidebar tabs: **Actions** | **Movements**.
 
-Habilitar `supabase_realtime` publication em: `server_configs`, `online_players`, `server_logs`. Overview subscreve os três com cleanup em `useEffect`.
+- Lista à esquerda (filtro por `target_kind` + busca), editor à direita com **Monaco Editor** (`@monaco-editor/react`), tema `vs-dark`, linguagem `lua` para paridade com OTServ.
+- Header do editor: campos `Nome`, `Alvo (Item ID / ActionID / UniqueID)`, `Enabled` toggle.
+- Snippets/boilerplate padrão inseridos ao criar:
+  ```lua
+  function onUse(player, item, fromPos, target, toPos)
+    -- ...
+    return true
+  end
+  ```
+- Movements: seletor de evento (`onStepIn`, `onStepOut`, `onEquip`, `onDeEquip`, `onAddItem`, `onRemoveItem`), gera skeleton correspondente.
+- Botão "Validar sintaxe" (parser Lua no cliente via `luaparse`).
+- Salvamento apenas persiste no banco — execução real fica com o servidor Colyseus (fora de escopo).
 
-## 6. Design
+Arquivos:
+- `src/routes/dev.scripts.tsx` + sub-rotas `dev.scripts.actions.tsx`, `dev.scripts.movements.tsx`
+- `src/components/dev/scripts/ScriptList.tsx`
+- `src/components/dev/scripts/ScriptEditor.tsx` (Monaco)
+- `src/lib/dev/scripts.functions.ts`
+- Deps: `@monaco-editor/react`, `luaparse`
 
-Reutilizar tokens `--dev-*` já definidos. Terminal de logs com fundo `#000`, mono `ui-monospace`, cor por level (info=slate-300, warn=amber-400, error=red-400, debug=slate-500). Cards com `dev-panel` + accent glow no status.
+---
 
-## Fora do escopo
+## 5. Nova aba `/dev/npcs` (NPCs & Quests)
 
-- Backend Colyseus escrevendo em `online_players`/`server_logs` (só criamos as tabelas + o painel de leitura; integração real do server AWS fica pra outra tarefa).
-- Retenção/rotação de logs.
-- Editor de animações de monstro (usa sprite estático por agora).
-- Auth/roles novos (usa `has_role('admin')` já existente).
+Duas sub-abas: **NPCs**, **Quests**.
 
-Aprova pra eu começar pela migração + `/dev/overview`?
+### NPCs
+- Lista + form. Form contém:
+  - Nome, sprite (Object Picker de `game_objects` kind=`creature`), outfit (head/body/legs/feet + addons)
+  - `walk_radius`
+  - **Speech**: chips para `greet`, `farewell`, `idle` (`text[]`)
+  - **Keywords**: tabela `keyword → answer` (múltiplos gatilhos)
+  - **Trade Window** (visual): grid com colunas `Item | Ícone | Comprar | Vender | Stock`; picker de item lateral, drag para adicionar linha. Persiste em `npc_trades`.
+
+### Quests
+- Form: nome, descrição, storage key/value, level mínimo.
+- Lista de passos (drag reorder): tipo (`talk`|`kill`|`collect`|`reach_tile`) + params + recompensa (jsonb builder).
+
+Arquivos:
+- `src/routes/dev.npcs.tsx`, `dev.npcs.list.tsx`, `dev.npcs.quests.tsx`
+- `src/components/dev/npcs/NpcForm.tsx`
+- `src/components/dev/npcs/TradeWindow.tsx`
+- `src/components/dev/npcs/QuestBuilder.tsx`
+- `src/lib/dev/npcs.functions.ts`
+- `src/lib/dev/quests.functions.ts`
+
+---
+
+## 6. Sidebar `/dev` reorganizada
+
+```
+Overview
+Mundo
+  ├─ Mapa (RME)
+  ├─ Paletas
+  └─ Áreas
+Objetos
+  ├─ Sprites (Object Builder)
+  ├─ Itens
+  └─ Criaturas / Monstros
+Gameplay
+  ├─ Vocações & Magias
+  ├─ NPCs & Quests
+  └─ Actions & Movements
+Sistema
+  └─ Config Global
+```
+
+---
+
+## Detalhes técnicos
+
+- Todas as server fns em `src/lib/dev/*.functions.ts` com `requireSupabaseAuth` + `assertAdmin`.
+- Canvas do mapa em `<canvas>` 2D com viewport virtualizado (renderiza só tiles visíveis) para suportar mapas grandes.
+- Upload de sprites usa signed URL do bucket `game-sprites` já existente; hash calculado client-side antes do upload evita duplicatas.
+- Monaco carregado dinamicamente (`import()`), fora do bundle inicial.
+- Realtime não é necessário nesses editores (single-admin workflow); manter só no `/dev/overview`.
+- Migração cuida de backfill: cria `game_objects` derivados dos `game_items` existentes (1 objeto por item com `object_kind='item'`, sprite referenciado); `map_tiles.z` default 7 preserva mapas atuais.
+
+## Fora de escopo (não vai neste ciclo)
+
+- Execução real dos scripts Lua (fica com Colyseus/servidor de jogo).
+- Exportador `.otbm` / `.dat` / `.spr` (podemos adicionar depois se precisar interoperar).
+- Editor de casas (RME houses) e waypoints.
+- Sistema de raids/spawns temporizados (só o spawn_point atual continua).
+- Simulador in-editor dos scripts.
+
+---
+
+Se aprovar, começo pela migração + `game_objects/object_sprites` + reescrita da aba Sprites (Object Builder), depois mapa RME, depois scripts/NPCs — em três PRs internos para o preview ficar navegável a cada passo.
