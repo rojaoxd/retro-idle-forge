@@ -1,46 +1,25 @@
-# Plano: multiplayer render + movimento suave estilo Tibia 7.4
+# Plano: destravar Phaser, centralizar canvas e limpar overlay
 
-Ajustes só em `src/game/scenes/GameScene.ts`. Nada em Colyseus/servidor, UI ou auth.
+## Diagnóstico
+- `/assets/mapa.json` e `/assets/nlbWl37.png` **estão sim disponíveis** (HTTP 200 no dev server). O texto `[object ProgressEvent]` no canto superior esquerdo NÃO vem do Phaser — vem do `GameViewport`, que renderiza `netStore.error`. Um `WebSocket error` do Colyseus (`ws://54.233.23.67:2567`) vira `String(event) === "[object ProgressEvent]"`. Mesmo assim, vou endurecer o loader do mapa e a mensagem para não confundir.
+- Tela preta: sem player local (Colyseus não conecta ou o servidor não emite `players`), a câmera não segue e o mapa até renderiza mas fica fora do viewport padrão da câmera do Phaser. Vou forçar a câmera a centralizar no centro do mapa como fallback.
 
-## 1. Render de outros jogadores (onAdd / onRemove)
+## Mudanças
 
-Já existe o esqueleto (`players.onAdd` / `players.onRemove` / `players.forEach`). Vou manter e endurecer:
+### 1. `src/game/scenes/GameScene.ts` — loader resiliente + câmera com fallback
+- Trocar `load.tilemapTiledJSON` por `load.json("mapa-json", MAP_URL)` e construir o tilemap manualmente: `this.make.tilemap({ data, tileWidth:32, tileHeight:32 })` **não** funciona diretamente com dados Tiled; então uso `this.cache.tilemap.add("mapa", { format: Phaser.Tilemaps.Formats.TILED_JSON, data })` antes de `make.tilemap({ key: "mapa" })`. Isso ignora qualquer `image` interna do `.tmj` e o carregamento da imagem é 100% feito por `load.image(TILESET_IMAGE_KEY, TILESET_IMAGE_URL)`.
+- Logar erro real de load (`file.src`, `file.key`) mas não empurrar para `netStore` — separar do erro de rede.
+- No fallback (sem player local ainda) centralizar câmera: `cameras.main.centerOn(map.widthInPixels/2, map.heightInPixels/2)`.
+- Converter mensagem de erro do WebSocket na `PhaserCanvas` de `String(e)` para `"conexão recusada"` quando for `Event`/`ProgressEvent` (elimina o `[object ProgressEvent]`).
 
-- Garantir que o listener seja registrado **antes** do `forEach` inicial (evita duplicar quem já estava na sala).
-- Diferenciar visualmente: player local com retângulo azul + label ciano; remotos com retângulo âmbar + label verde (já está assim, apenas confirmar).
-- Em `onRemove`, destruir o container e limpar qualquer tween ativo no `Map` de players.
+### 2. `src/components/tibia/GameViewport.tsx` — canvas centralizado, sem overlay
+- Remover **todo** o bloco de debug (título "Mythera 7.4", FPS, Latency, status/erro). Só sobra `<PhaserCanvas />`.
+- Envolver `<PhaserCanvas />` num wrapper `flex items-center justify-center` com fundo preto, e limitar a área interna (mantém proporção 15×11 tiles do Tibia clássico ≈ 480×352 px, com `max-width` e `aspect-[15/11]`) para o canvas ficar centralizado dentro da área preta central. O Phaser (`scale.mode = RESIZE`) preenche esse container.
 
-## 2. Movimento suave (lerp / tween) na velocidade Tibia 7.4
-
-Trocar a interpolação por-frame (`c.x += (target-c.x)*0.25`) por um **tween linear com duração fixa por tile**, replicando o "step walking" clássico:
-
-- Constante `STEP_MS = 500` (Tibia 7.4: chão normal ≈ 500 ms/SQM na velocidade base). Deixar exportável para ajuste futuro.
-- Quando o servidor envia nova posição (`onChange` / `listen x,y` no player):
-  1. Se já existe um tween ativo naquele container, `tween.stop()` e snap para o alvo anterior (evita acumular).
-  2. Criar `this.tweens.add({ targets: container, x: newX, y: newY, duration: STEP_MS, ease: "Linear" })`.
-  3. Guardar o tween em `PlayerVisual.tween` para poder cancelar.
-- O `target` já não é mais interpolado no `update()`; remover o loop de lerp manual em `update`.
-
-## 3. Controle local coordenado (envio por `direction`)
-
-Trocar o payload de `move` de `{x, y}` para `{direction}` conforme o servidor espera:
-
-- No `update()`, ler input (setas + WASD) e mapear para `"up" | "down" | "left" | "right"`.
-- `this.room.send("move", { direction })`.
-- **Predição local otimista** para o jogador local: ao enviar, também disparar o mesmo tween de 500 ms no container do próprio player em direção ao tile alvo (`me.x + dx*TILE`, `me.y + dy*TILE`). Quando o servidor confirmar via `onChange`, o tween é substituído — se bater com o alvo previsto, é imperceptível; se divergir, o novo tween corrige.
-- **Cooldown = STEP_MS**: só aceita próximo input quando o tween atual do jogador local termina (usa `nextMoveAt = time.now + STEP_MS`). Isso evita "spam" e casa com a cadência do servidor.
-- Bloqueio quando foco está em `<input>`/`<textarea>` (já existe).
-
-## Detalhes técnicos
-
-- Tipo `PlayerVisual` ganha `tween?: Phaser.Tweens.Tween | null`.
-- `addPlayer`: cria container em `(p.x, p.y)` sem tween inicial (spawn instantâneo).
-- `removePlayer`: `v.tween?.stop()` antes de `container.destroy()`.
-- Câmera continua com `startFollow` no container local — o follow acompanha o tween naturalmente.
-- Latência: continua medida no primeiro `onChange` após um `send` local (já implementado).
+### 3. `src/components/tibia/PhaserCanvas.tsx` — sanitizar mensagem de erro
+- Ao capturar erro do `joinGameRoom`, se `e` for um `Event` (não `Error`), reportar `"servidor indisponível"` em vez de `String(e)`.
 
 ## Fora de escopo
-- Animação de sprite andando (frames de walk).
-- Path finding / clique-para-andar.
-- Colisão por tile no cliente (servidor é autoritativo).
-- Mudanças no schema Colyseus ou no servidor.
+- Mexer no servidor Colyseus.
+- Mudar sidebar, chat ou HUD lateral.
+- Adicionar animações/sprites de personagem.

@@ -56,8 +56,15 @@ export function PhaserCanvas() {
         });
       } catch (e) {
         console.error("[Colyseus] Falha ao conectar:", e);
-        setStatus("error", e instanceof Error ? e.message : String(e));
+        const msg =
+          e instanceof Error
+            ? e.message
+            : typeof Event !== "undefined" && e instanceof Event
+              ? "servidor indisponível"
+              : String(e);
+        setStatus("error", msg);
       }
+
     })();
 
     return () => {

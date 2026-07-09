@@ -59,10 +59,22 @@ export class GameScene extends Phaser.Scene {
       console.warn("[GameScene] loaderror:", file.key, file.src);
     });
     this.load.image(TILESET_IMAGE_KEY, TILESET_IMAGE_URL);
-    this.load.tilemapTiledJSON("mapa", MAP_URL);
+    // Carrega como JSON puro para ignorar qualquer "image" interna do .tmj
+    // (evita Phaser tentar buscar o tileset num path do computador do autor).
+    this.load.json("mapa-json", MAP_URL);
     this.load.on(`filecomplete-image-${TILESET_IMAGE_KEY}`, () => (this.hasTilesetImage = true));
-    this.load.on("filecomplete-tilemapTiledJSON-mapa", () => (this.hasTiledMap = true));
+    this.load.on("filecomplete-json-mapa-json", () => {
+      const raw = this.cache.json.get("mapa-json");
+      if (raw) {
+        this.cache.tilemap.add("mapa", {
+          format: Phaser.Tilemaps.Formats.TILED_JSON,
+          data: raw,
+        });
+        this.hasTiledMap = true;
+      }
+    });
   }
+
 
   create() {
     this.cameras.main.setBackgroundColor("#000000");
@@ -88,12 +100,15 @@ export class GameScene extends Phaser.Scene {
         if (ts) {
           map.layers.forEach((l) => map.createLayer(l.name, ts, 0, 0));
           this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+          // Fallback de centralização até o player local existir.
+          this.cameras.main.centerOn(map.widthInPixels / 2, map.heightInPixels / 2);
           return;
         }
       } catch (e) {
         console.warn("[GameScene] Tiled map falhou, usando fallback:", e);
       }
     }
+
     const g = this.add.graphics();
     for (let y = 0; y < 50; y++) {
       for (let x = 0; x < 50; x++) {
