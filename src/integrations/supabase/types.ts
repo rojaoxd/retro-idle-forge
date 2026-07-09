@@ -196,6 +196,27 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          character_name: string
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          character_name: string
+          created_at?: string
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          character_name?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
