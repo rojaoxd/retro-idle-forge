@@ -65,7 +65,7 @@ function ItemsPage() {
     mutationFn: (v: Item) => upsert({ data: v }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["items"] });
-      setSelected(r.row);
+      setSelected(r.row as any);
     },
   });
   const delMut = useMutation({

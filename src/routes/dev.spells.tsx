@@ -51,7 +51,7 @@ function SpellsPage() {
     mutationFn: (v: Effect) => upsert({ data: v }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["effects"] });
-      setSelected(r.row);
+      setSelected(r.row as any);
     },
   });
   const delMut = useMutation({

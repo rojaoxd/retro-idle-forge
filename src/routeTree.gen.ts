@@ -13,6 +13,10 @@ import { Route as DevRouteImport } from './routes/dev'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DevIndexRouteImport } from './routes/dev.index'
 import { Route as DevSpritesRouteImport } from './routes/dev.sprites'
+import { Route as DevSpellsRouteImport } from './routes/dev.spells'
+import { Route as DevItemsRouteImport } from './routes/dev.items'
+import { Route as DevCreaturesRouteImport } from './routes/dev.creatures'
+import { Route as DevConfigRouteImport } from './routes/dev.config'
 
 const DevRoute = DevRouteImport.update({
   id: '/dev',
@@ -34,15 +38,43 @@ const DevSpritesRoute = DevSpritesRouteImport.update({
   path: '/sprites',
   getParentRoute: () => DevRoute,
 } as any)
+const DevSpellsRoute = DevSpellsRouteImport.update({
+  id: '/spells',
+  path: '/spells',
+  getParentRoute: () => DevRoute,
+} as any)
+const DevItemsRoute = DevItemsRouteImport.update({
+  id: '/items',
+  path: '/items',
+  getParentRoute: () => DevRoute,
+} as any)
+const DevCreaturesRoute = DevCreaturesRouteImport.update({
+  id: '/creatures',
+  path: '/creatures',
+  getParentRoute: () => DevRoute,
+} as any)
+const DevConfigRoute = DevConfigRouteImport.update({
+  id: '/config',
+  path: '/config',
+  getParentRoute: () => DevRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dev': typeof DevRouteWithChildren
+  '/dev/config': typeof DevConfigRoute
+  '/dev/creatures': typeof DevCreaturesRoute
+  '/dev/items': typeof DevItemsRoute
+  '/dev/spells': typeof DevSpellsRoute
   '/dev/sprites': typeof DevSpritesRoute
   '/dev/': typeof DevIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dev/config': typeof DevConfigRoute
+  '/dev/creatures': typeof DevCreaturesRoute
+  '/dev/items': typeof DevItemsRoute
+  '/dev/spells': typeof DevSpellsRoute
   '/dev/sprites': typeof DevSpritesRoute
   '/dev': typeof DevIndexRoute
 }
@@ -50,15 +82,43 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dev': typeof DevRouteWithChildren
+  '/dev/config': typeof DevConfigRoute
+  '/dev/creatures': typeof DevCreaturesRoute
+  '/dev/items': typeof DevItemsRoute
+  '/dev/spells': typeof DevSpellsRoute
   '/dev/sprites': typeof DevSpritesRoute
   '/dev/': typeof DevIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dev' | '/dev/sprites' | '/dev/'
+  fullPaths:
+    | '/'
+    | '/dev'
+    | '/dev/config'
+    | '/dev/creatures'
+    | '/dev/items'
+    | '/dev/spells'
+    | '/dev/sprites'
+    | '/dev/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dev/sprites' | '/dev'
-  id: '__root__' | '/' | '/dev' | '/dev/sprites' | '/dev/'
+  to:
+    | '/'
+    | '/dev/config'
+    | '/dev/creatures'
+    | '/dev/items'
+    | '/dev/spells'
+    | '/dev/sprites'
+    | '/dev'
+  id:
+    | '__root__'
+    | '/'
+    | '/dev'
+    | '/dev/config'
+    | '/dev/creatures'
+    | '/dev/items'
+    | '/dev/spells'
+    | '/dev/sprites'
+    | '/dev/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -96,15 +156,51 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevSpritesRouteImport
       parentRoute: typeof DevRoute
     }
+    '/dev/spells': {
+      id: '/dev/spells'
+      path: '/spells'
+      fullPath: '/dev/spells'
+      preLoaderRoute: typeof DevSpellsRouteImport
+      parentRoute: typeof DevRoute
+    }
+    '/dev/items': {
+      id: '/dev/items'
+      path: '/items'
+      fullPath: '/dev/items'
+      preLoaderRoute: typeof DevItemsRouteImport
+      parentRoute: typeof DevRoute
+    }
+    '/dev/creatures': {
+      id: '/dev/creatures'
+      path: '/creatures'
+      fullPath: '/dev/creatures'
+      preLoaderRoute: typeof DevCreaturesRouteImport
+      parentRoute: typeof DevRoute
+    }
+    '/dev/config': {
+      id: '/dev/config'
+      path: '/config'
+      fullPath: '/dev/config'
+      preLoaderRoute: typeof DevConfigRouteImport
+      parentRoute: typeof DevRoute
+    }
   }
 }
 
 interface DevRouteChildren {
+  DevConfigRoute: typeof DevConfigRoute
+  DevCreaturesRoute: typeof DevCreaturesRoute
+  DevItemsRoute: typeof DevItemsRoute
+  DevSpellsRoute: typeof DevSpellsRoute
   DevSpritesRoute: typeof DevSpritesRoute
   DevIndexRoute: typeof DevIndexRoute
 }
 
 const DevRouteChildren: DevRouteChildren = {
+  DevConfigRoute: DevConfigRoute,
+  DevCreaturesRoute: DevCreaturesRoute,
+  DevItemsRoute: DevItemsRoute,
+  DevSpellsRoute: DevSpellsRoute,
   DevSpritesRoute: DevSpritesRoute,
   DevIndexRoute: DevIndexRoute,
 }

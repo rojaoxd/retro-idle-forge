@@ -53,7 +53,7 @@ function CreaturesPage() {
     mutationFn: (v: Creature) => upsert({ data: v }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["creatures"] });
-      setSelected(r.row);
+      setSelected(r.row as any);
     },
   });
   const delMut = useMutation({
