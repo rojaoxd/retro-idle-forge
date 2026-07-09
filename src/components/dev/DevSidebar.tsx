@@ -1,14 +1,26 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Image, Package, Users, Sparkles, Settings, LogOut, Map } from "lucide-react";
+import {
+  LayoutDashboard,
+  Image,
+  Package,
+  Skull,
+  Sparkles,
+  Wand2,
+  Settings,
+  LogOut,
+  Map,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 const items = [
-  { to: "/dev/sprites", label: "Sprites", icon: Image },
-  { to: "/dev/map", label: "Map Editor", icon: Map },
-  { to: "/dev/items", label: "Items & Objetos", icon: Package },
-  { to: "/dev/creatures", label: "Outfits & Criaturas", icon: Users },
-  { to: "/dev/spells", label: "Efeitos & Projéteis", icon: Sparkles },
+  { to: "/dev/overview", label: "Overview", icon: LayoutDashboard },
+  { to: "/dev/map", label: "Mapa & Spawns", icon: Map },
+  { to: "/dev/items", label: "Itens & Equipamentos", icon: Package },
+  { to: "/dev/monsters", label: "Criaturas (Monstros)", icon: Skull },
+  { to: "/dev/vocations", label: "Vocações & Magias", icon: Wand2 },
+  { to: "/dev/sprites", label: "Sprites & Outfits", icon: Image },
+  { to: "/dev/spells", label: "Efeitos Visuais", icon: Sparkles },
   { to: "/dev/config", label: "Config Global", icon: Settings },
 ] as const;
 
@@ -19,8 +31,10 @@ export function DevSidebar({ email }: { email?: string | null }) {
       className="flex h-screen w-60 shrink-0 flex-col border-r"
       style={{ background: "var(--dev-surface)", borderColor: "var(--dev-border)" }}
     >
-      <div className="flex h-14 items-center gap-2 border-b px-4"
-           style={{ borderColor: "var(--dev-border)" }}>
+      <div
+        className="flex h-14 items-center gap-2 border-b px-4"
+        style={{ borderColor: "var(--dev-border)" }}
+      >
         <div
           className="grid h-8 w-8 place-items-center rounded"
           style={{ background: "var(--dev-accent)", color: "#052e2b" }}
@@ -31,9 +45,11 @@ export function DevSidebar({ email }: { email?: string | null }) {
           <span className="text-sm font-semibold" style={{ color: "var(--dev-text)" }}>
             Engine Console
           </span>
-          <span className="text-[10px] uppercase tracking-widest"
-                style={{ color: "var(--dev-text-dim)" }}>
-            Tibia 7.4 · Dev
+          <span
+            className="text-[10px] uppercase tracking-widest"
+            style={{ color: "var(--dev-text-dim)" }}
+          >
+            MMORPG · Admin
           </span>
         </div>
       </div>
@@ -63,7 +79,10 @@ export function DevSidebar({ email }: { email?: string | null }) {
         })}
       </nav>
 
-      <div className="border-t p-3 text-xs" style={{ borderColor: "var(--dev-border)", color: "var(--dev-text-dim)" }}>
+      <div
+        className="border-t p-3 text-xs"
+        style={{ borderColor: "var(--dev-border)", color: "var(--dev-text-dim)" }}
+      >
         <div className="truncate">{email ?? "—"}</div>
         <button
           type="button"
