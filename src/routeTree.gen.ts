@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as DevRouteImport } from './routes/dev'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DevIndexRouteImport } from './routes/dev.index'
+import { Route as DevSpritesRouteImport } from './routes/dev.sprites'
 
 const DevRoute = DevRouteImport.update({
   id: '/dev',
@@ -28,28 +29,36 @@ const DevIndexRoute = DevIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DevRoute,
 } as any)
+const DevSpritesRoute = DevSpritesRouteImport.update({
+  id: '/sprites',
+  path: '/sprites',
+  getParentRoute: () => DevRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dev': typeof DevRouteWithChildren
+  '/dev/sprites': typeof DevSpritesRoute
   '/dev/': typeof DevIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dev/sprites': typeof DevSpritesRoute
   '/dev': typeof DevIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dev': typeof DevRouteWithChildren
+  '/dev/sprites': typeof DevSpritesRoute
   '/dev/': typeof DevIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dev' | '/dev/'
+  fullPaths: '/' | '/dev' | '/dev/sprites' | '/dev/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dev'
-  id: '__root__' | '/' | '/dev' | '/dev/'
+  to: '/' | '/dev/sprites' | '/dev'
+  id: '__root__' | '/' | '/dev' | '/dev/sprites' | '/dev/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -80,14 +89,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevIndexRouteImport
       parentRoute: typeof DevRoute
     }
+    '/dev/sprites': {
+      id: '/dev/sprites'
+      path: '/sprites'
+      fullPath: '/dev/sprites'
+      preLoaderRoute: typeof DevSpritesRouteImport
+      parentRoute: typeof DevRoute
+    }
   }
 }
 
 interface DevRouteChildren {
+  DevSpritesRoute: typeof DevSpritesRoute
   DevIndexRoute: typeof DevIndexRoute
 }
 
 const DevRouteChildren: DevRouteChildren = {
+  DevSpritesRoute: DevSpritesRoute,
   DevIndexRoute: DevIndexRoute,
 }
 
