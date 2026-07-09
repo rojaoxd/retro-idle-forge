@@ -100,12 +100,15 @@ export class GameScene extends Phaser.Scene {
         if (ts) {
           map.layers.forEach((l) => map.createLayer(l.name, ts, 0, 0));
           this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+          // Fallback de centralização até o player local existir.
+          this.cameras.main.centerOn(map.widthInPixels / 2, map.heightInPixels / 2);
           return;
         }
       } catch (e) {
         console.warn("[GameScene] Tiled map falhou, usando fallback:", e);
       }
     }
+
     const g = this.add.graphics();
     for (let y = 0; y < 50; y++) {
       for (let x = 0; x < 50; x++) {
