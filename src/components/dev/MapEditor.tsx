@@ -11,12 +11,20 @@ import { SpriteThumb } from "./SpriteThumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skull } from "lucide-react";
 
 const TILE = 32;
 const COLS = 40;
 const ROWS = 30;
 
-type Layer = "floor" | "obstacles";
+type Layer = "floor" | "obstacles" | "spawn";
 
 type SpriteRow = {
   id: number;
@@ -34,6 +42,7 @@ type TileRow = {
   layer: Layer;
   tile_id: number;
   blocking: boolean;
+  spawn_monster_id: string | null;
 };
 
 export function MapEditor() {
@@ -47,6 +56,7 @@ export function MapEditor() {
   const [tool, setTool] = useState<"paint" | "erase">("paint");
   const [blocking, setBlocking] = useState(false);
   const [selectedSprite, setSelectedSprite] = useState<SpriteRow | null>(null);
+  const [selectedMonsterId, setSelectedMonsterId] = useState<string>("");
   const [search, setSearch] = useState("");
   const draggingRef = useRef<0 | 1 | 2 | null>(null);
 
@@ -56,7 +66,8 @@ export function MapEditor() {
   });
   const spritesQ = useQuery({
     queryKey: ["sprites-palette", search],
-    queryFn: () => spritesFn({ data: { search: search || undefined, limit: 200, offset: 0 } }),
+    queryFn: () =>
+      spritesFn({ data: { search: search || undefined, limit: 200, offset: 0 } }),
   });
 
   const upsert = useMutation({
@@ -66,6 +77,7 @@ export function MapEditor() {
       layer: Layer;
       tile_id: number;
       blocking: boolean;
+      spawn_monster_id?: string | null;
     }) => upsertFn({ data: v }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["map-tiles"] }),
   });
@@ -74,7 +86,6 @@ export function MapEditor() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["map-tiles"] }),
   });
 
-  // Índices para render rápido
   const byCell = useMemo(() => {
     const map = new Map<string, TileRow>();
     for (const t of (tilesQ.data?.tiles ?? []) as TileRow[]) {
@@ -91,6 +102,7 @@ export function MapEditor() {
   }, [tilesQ.data, spritesQ.data]);
 
   const urlMap = { ...(tilesQ.data?.urlMap ?? {}), ...(spritesQ.data?.urlMap ?? {}) };
+  const monsters = (tilesQ.data?.monsters ?? []) as { id: string; name: string }[];
 
   function applyAt(x: number, y: number, button: number) {
     if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return;
@@ -99,7 +111,13 @@ export function MapEditor() {
       return;
     }
     if (!selectedSprite) return;
-    upsert.mutate({ x, y, layer, tile_id: selectedSprite.id, blocking });
+    const payload: any = { x, y, layer, tile_id: selectedSprite.id, blocking };
+    if (layer === "spawn") {
+      if (!selectedMonsterId) return;
+      payload.spawn_monster_id = selectedMonsterId;
+      payload.blocking = false;
+    }
+    upsert.mutate(payload);
   }
 
   function cellFromEvent(e: React.MouseEvent<HTMLDivElement>) {
@@ -111,22 +129,21 @@ export function MapEditor() {
 
   return (
     <div className="grid grid-cols-[280px_1fr] gap-4">
-      {/* Paleta */}
       <div className="dev-panel space-y-3 p-3">
         <div className="space-y-2">
           <label className="block text-[10px] uppercase tracking-wider text-slate-400">
             Camada
           </label>
           <div className="flex gap-1">
-            {(["floor", "obstacles"] as Layer[]).map((l) => (
+            {(["floor", "obstacles", "spawn"] as Layer[]).map((l) => (
               <Button
                 key={l}
                 size="sm"
                 variant={layer === l ? "default" : "outline"}
                 onClick={() => setLayer(l)}
-                className="flex-1"
+                className="flex-1 text-xs"
               >
-                {l}
+                {l === "spawn" ? "Spawn" : l === "floor" ? "Floor" : "Obs."}
               </Button>
             ))}
           </div>
@@ -145,13 +162,41 @@ export function MapEditor() {
             ))}
           </div>
 
-          <label className="flex items-center gap-2 text-xs text-slate-300">
-            <Checkbox
-              checked={blocking}
-              onCheckedChange={(v) => setBlocking(v === true)}
-            />
-            Bloqueia passagem
-          </label>
+          {layer !== "spawn" && (
+            <label className="flex items-center gap-2 text-xs text-slate-300">
+              <Checkbox
+                checked={blocking}
+                onCheckedChange={(v) => setBlocking(v === true)}
+              />
+              Bloqueia passagem
+            </label>
+          )}
+
+          {layer === "spawn" && (
+            <div className="space-y-1">
+              <label className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-red-400">
+                <Skull className="h-3 w-3" /> Monstro
+              </label>
+              <Select value={selectedMonsterId} onValueChange={setSelectedMonsterId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Escolha o monstro…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {monsters.length === 0 ? (
+                    <div className="px-2 py-2 text-xs text-slate-500">
+                      Cadastre monstros primeiro
+                    </div>
+                  ) : (
+                    monsters.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         <div className="border-t border-slate-700 pt-3">
@@ -160,7 +205,7 @@ export function MapEditor() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <div className="mt-2 max-h-[520px] overflow-y-auto">
+          <div className="mt-2 max-h-[460px] overflow-y-auto">
             <div className="grid grid-cols-5 gap-1">
               {(spritesQ.data?.rows ?? []).map((r: any) => {
                 const active = selectedSprite?.id === r.id;
@@ -195,7 +240,6 @@ export function MapEditor() {
         </div>
       </div>
 
-      {/* Grid */}
       <div className="dev-panel p-2">
         <div
           className="relative select-none"
@@ -220,7 +264,6 @@ export function MapEditor() {
             applyAt(x, y, draggingRef.current);
           }}
         >
-          {/* Grid lines */}
           <svg
             className="pointer-events-none absolute inset-0"
             width={COLS * TILE}
@@ -248,8 +291,7 @@ export function MapEditor() {
             ))}
           </svg>
 
-          {/* Tiles */}
-          {(["floor", "obstacles"] as Layer[]).map((lyr) =>
+          {(["floor", "obstacles", "spawn"] as Layer[]).map((lyr) =>
             Array.from(byCell.values())
               .filter((t) => t.layer === lyr)
               .map((t) => {
@@ -270,13 +312,35 @@ export function MapEditor() {
                       backgroundPosition: `-${sp.x}px -${sp.y}px`,
                       backgroundSize: "auto",
                       imageRendering: "pixelated",
-                      outline: t.blocking ? "1px solid rgba(239,68,68,0.6)" : undefined,
-                      zIndex: lyr === "floor" ? 1 : 2,
+                      outline: t.blocking
+                        ? "1px solid rgba(239,68,68,0.6)"
+                        : lyr === "spawn"
+                          ? "1px solid rgba(168,85,247,0.7)"
+                          : undefined,
+                      zIndex: lyr === "floor" ? 1 : lyr === "obstacles" ? 2 : 3,
                     }}
                   />
                 );
               }),
           )}
+
+          {Array.from(byCell.values())
+            .filter((t) => t.layer === "spawn")
+            .map((t) => (
+              <div
+                key={`skull:${t.x}:${t.y}`}
+                className="pointer-events-none absolute grid place-items-center"
+                style={{
+                  left: t.x * TILE,
+                  top: t.y * TILE,
+                  width: TILE,
+                  height: TILE,
+                  zIndex: 4,
+                }}
+              >
+                <Skull className="h-4 w-4 text-purple-300 drop-shadow" />
+              </div>
+            ))}
         </div>
       </div>
     </div>
