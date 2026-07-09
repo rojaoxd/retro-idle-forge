@@ -4,7 +4,9 @@ import type { Room } from "colyseus.js";
 const TILE = 32;
 const MOVE_COOLDOWN_MS = 150;
 const MAP_URL = "/assets/mapa.json";
-const SPRITES_URL = "/assets/sprites.png";
+const TILESET_IMAGE_URL = "/assets/nlbWl37.png";
+const TILESET_IMAGE_KEY = "cenario";
+const TILESET_NAME = "cenario"; // deve bater com o "name" do tileset no .tmj
 
 type PlayerLike = { x: number; y: number; name: string };
 type PlayersMap = {
@@ -36,7 +38,7 @@ export class GameScene extends Phaser.Scene {
   private onLatency?: (ms: number) => void;
   private onFps?: (fps: number) => void;
   private fpsTimer = 0;
-  private hasSprites = false;
+  private hasTilesetImage = false;
   private hasTiledMap = false;
 
   constructor() {
@@ -50,14 +52,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload() {
-    // Tenta carregar assets reais; falhas viram fallback.
     this.load.on("loaderror", (file: Phaser.Loader.File) => {
-      if (file.key === "sprites") this.hasSprites = false;
-      if (file.key === "mapa") this.hasTiledMap = false;
+      console.warn("[GameScene] loaderror:", file.key, file.src);
     });
-    this.load.image("sprites", SPRITES_URL);
+    this.load.image(TILESET_IMAGE_KEY, TILESET_IMAGE_URL);
     this.load.tilemapTiledJSON("mapa", MAP_URL);
-    this.load.on("filecomplete-image-sprites", () => (this.hasSprites = true));
+    this.load.on(`filecomplete-image-${TILESET_IMAGE_KEY}`, () => (this.hasTilesetImage = true));
     this.load.on("filecomplete-tilemapTiledJSON-mapa", () => (this.hasTiledMap = true));
   }
 
@@ -71,45 +71,48 @@ export class GameScene extends Phaser.Scene {
       Phaser.Input.Keyboard.Key
     >;
 
+    this.cameras.main.setZoom(2);
+    this.cameras.main.roundPixels = true;
+
     this.wireRoom();
   }
 
   private buildWorld() {
-    if (this.hasTiledMap) {
+    if (this.hasTiledMap && this.hasTilesetImage) {
       try {
         const map = this.make.tilemap({ key: "mapa" });
-        const firstTileset = map.tilesets[0]?.name ?? "sprites";
-        const ts = map.addTilesetImage(firstTileset, "sprites");
+        const ts = map.addTilesetImage(TILESET_NAME, TILESET_IMAGE_KEY);
         if (ts) {
           map.layers.forEach((l) => map.createLayer(l.name, ts, 0, 0));
+          this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+          return;
         }
-        return;
+        console.warn("[GameScene] addTilesetImage retornou null");
       } catch (e) {
         console.warn("[GameScene] Tiled map falhou, usando fallback:", e);
       }
     }
-    // Fallback: grid procedural 30x20.
+    // Fallback procedural
     const g = this.add.graphics();
-    for (let y = 0; y < 20; y++) {
-      for (let x = 0; x < 30; x++) {
+    for (let y = 0; y < 50; y++) {
+      for (let x = 0; x < 50; x++) {
         const r = Math.random();
-        let color = 0x2e6b2a; // grama
-        if (r < 0.18) color = 0x7a5a30; // terra
-        else if (r < 0.22) color = 0x555555; // pedra (obstáculo visual)
+        let color = 0x2e6b2a;
+        if (r < 0.18) color = 0x7a5a30;
+        else if (r < 0.22) color = 0x555555;
         g.fillStyle(color, 1);
         g.fillRect(x * TILE, y * TILE, TILE, TILE);
         g.lineStyle(1, 0x000000, 0.15);
         g.strokeRect(x * TILE, y * TILE, TILE, TILE);
       }
     }
+    this.cameras.main.setBounds(0, 0, 50 * TILE, 50 * TILE);
   }
 
   private wireRoom() {
     const state = this.room.state as { players?: PlayersMap };
     const players = state?.players;
     if (!players) {
-      console.warn("[GameScene] room.state.players não disponível ainda.");
-      // Tenta novamente quando o state chegar.
       this.room.onStateChange.once(() => this.wireRoom());
       return;
     }
@@ -118,17 +121,9 @@ export class GameScene extends Phaser.Scene {
       if (this.players.has(sessionId)) return;
       const isMe = sessionId === this.room.sessionId;
       const container = this.add.container(p.x, p.y);
-      let body: Phaser.GameObjects.GameObject;
-      if (this.hasSprites) {
-        const s = this.add.sprite(0, 0, "sprites", 0);
-        if (isMe) s.setTint(0x9ad4ff);
-        body = s;
-      } else {
-        const rect = this.add.rectangle(0, 0, TILE - 4, TILE - 4, isMe ? 0x4fa4ff : 0xd4b46a);
-        rect.setStrokeStyle(1, 0x000000);
-        body = rect;
-      }
-      const label = this.add.text(0, -TILE / 2 - 8, p.name ?? "?", {
+      const rect = this.add.rectangle(0, 0, TILE - 6, TILE - 6, isMe ? 0x4fa4ff : 0xd4b46a);
+      rect.setStrokeStyle(1, 0x000000);
+      const label = this.add.text(0, -TILE / 2 - 6, p.name ?? "?", {
         fontFamily: "Verdana, Tahoma, sans-serif",
         fontSize: "10px",
         color: isMe ? "#7fd4ff" : "#40c040",
@@ -136,10 +131,13 @@ export class GameScene extends Phaser.Scene {
         strokeThickness: 2,
       });
       label.setOrigin(0.5, 0.5);
-      container.add([body, label]);
+      container.add([rect, label]);
       this.players.set(sessionId, { container, target: { x: p.x, y: p.y }, label });
 
-      // Escuta mudanças nesse player (API do Colyseus schema).
+      if (isMe) {
+        this.cameras.main.startFollow(container, true, 0.15, 0.15);
+      }
+
       const anyPlayer = p as unknown as {
         onChange?: (cb: () => void) => void;
         listen?: (field: string, cb: (v: unknown) => void) => void;
@@ -169,26 +167,22 @@ export class GameScene extends Phaser.Scene {
 
     players.onAdd(addPlayer);
     players.onRemove(removePlayer);
-    // Players que já estavam quando entramos.
     players.forEach(addPlayer);
   }
 
   update(_time: number, deltaMs: number) {
-    // Interpolação
     this.players.forEach((v) => {
       const c = v.container;
       c.x += (v.target.x - c.x) * 0.25;
       c.y += (v.target.y - c.y) * 0.25;
     });
 
-    // FPS report a cada 500ms
     this.fpsTimer += deltaMs;
     if (this.fpsTimer > 500) {
       this.fpsTimer = 0;
       this.onFps?.(Math.round(this.game.loop.actualFps));
     }
 
-    // Input: bloqueia se o foco está num input do chat
     const ae = typeof document !== "undefined" ? document.activeElement : null;
     if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA")) return;
 
