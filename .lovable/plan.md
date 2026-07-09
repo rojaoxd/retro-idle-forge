@@ -1,33 +1,46 @@
-# Plano: Carregar mapa Tiled + sprites no Phaser
+# Plano: multiplayer render + movimento suave estilo Tibia 7.4
 
-## Arquivos enviados
-- `firstglobalmapa.tmj` — mapa Tiled 50×50 tiles, tile 32×32, tileset `cenario` (imagem `nlbWl37.png`, 3×3 tiles, 9 tiles totais).
-- `nlbWl37.png` — spritesheet do cenário.
+Ajustes só em `src/game/scenes/GameScene.ts`. Nada em Colyseus/servidor, UI ou auth.
 
-## Passos
+## 1. Render de outros jogadores (onAdd / onRemove)
 
-1. **Copiar assets para `public/assets/`** (servidos em `/assets/...`):
-   - `firstglobalmapa.tmj` → `public/assets/mapa.json`
-   - `nlbWl37.png` → `public/assets/sprites.png` (o `.tmj` já referencia `nlbWl37.png`, então vou salvar a imagem com esse nome também — `public/assets/nlbWl37.png` — e ajustar o loader para carregar pelo nome que o Tiled espera).
+Já existe o esqueleto (`players.onAdd` / `players.onRemove` / `players.forEach`). Vou manter e endurecer:
 
-2. **Ajustar `src/game/scenes/GameScene.ts`**:
-   - Trocar `SPRITES_URL` para `/assets/nlbWl37.png` e registrar o tileset com a chave `cenario` (que é o `name` do tileset no `.tmj`), casando com `map.addTilesetImage("cenario", "cenario")`.
-   - Simplificar `buildWorld()`: assumir que o Tiled map carrega (mantendo fallback só se `hasTiledMap` for false).
-   - Centralizar/limitar a câmera nos bounds do mapa (50×32 = 1600px de largura, 50×32 de altura) e fazer follow do container do player local.
-   - Aumentar zoom (`cameras.main.setZoom(2)`) para ficar legível no viewport atual.
+- Garantir que o listener seja registrado **antes** do `forEach` inicial (evita duplicar quem já estava na sala).
+- Diferenciar visualmente: player local com retângulo azul + label ciano; remotos com retângulo âmbar + label verde (já está assim, apenas confirmar).
+- Em `onRemove`, destruir o container e limpar qualquer tween ativo no `Map` de players.
 
-3. **Colyseus (`src/net/colyseus.ts` + `PhaserCanvas.tsx`)** — já está conectando em `ws://54.233.23.67:2567`, sala `game`, e sincronizando `x`/`y` via `room.send("move", {x, y})` com interpolação. Nada a mudar aqui além de garantir que o input use tiles de 32px (já usa) e que a câmera siga o player local.
+## 2. Movimento suave (lerp / tween) na velocidade Tibia 7.4
 
-4. **Substituir `GameCanvas` placeholder por `PhaserCanvas`** dentro do `GameShell` (ou verificar qual shell a rota `/` renderiza — `TibiaShell` usa `GameViewport`; conferir e trocar o mount para `PhaserCanvas` no viewport ativo).
+Trocar a interpolação por-frame (`c.x += (target-c.x)*0.25`) por um **tween linear com duração fixa por tile**, replicando o "step walking" clássico:
+
+- Constante `STEP_MS = 500` (Tibia 7.4: chão normal ≈ 500 ms/SQM na velocidade base). Deixar exportável para ajuste futuro.
+- Quando o servidor envia nova posição (`onChange` / `listen x,y` no player):
+  1. Se já existe um tween ativo naquele container, `tween.stop()` e snap para o alvo anterior (evita acumular).
+  2. Criar `this.tweens.add({ targets: container, x: newX, y: newY, duration: STEP_MS, ease: "Linear" })`.
+  3. Guardar o tween em `PlayerVisual.tween` para poder cancelar.
+- O `target` já não é mais interpolado no `update()`; remover o loop de lerp manual em `update`.
+
+## 3. Controle local coordenado (envio por `direction`)
+
+Trocar o payload de `move` de `{x, y}` para `{direction}` conforme o servidor espera:
+
+- No `update()`, ler input (setas + WASD) e mapear para `"up" | "down" | "left" | "right"`.
+- `this.room.send("move", { direction })`.
+- **Predição local otimista** para o jogador local: ao enviar, também disparar o mesmo tween de 500 ms no container do próprio player em direção ao tile alvo (`me.x + dx*TILE`, `me.y + dy*TILE`). Quando o servidor confirmar via `onChange`, o tween é substituído — se bater com o alvo previsto, é imperceptível; se divergir, o novo tween corrige.
+- **Cooldown = STEP_MS**: só aceita próximo input quando o tween atual do jogador local termina (usa `nextMoveAt = time.now + STEP_MS`). Isso evita "spam" e casa com a cadência do servidor.
+- Bloqueio quando foco está em `<input>`/`<textarea>` (já existe).
 
 ## Detalhes técnicos
 
-- Tiled JSON com `firstgid:1` → Phaser mapeia tile index `data[i] - 1` para frame do tileset (3 colunas × 3 linhas).
-- `map.addTilesetImage(tilesetName, imageKey)` — o `tilesetName` deve bater com `"cenario"` do `.tmj`; o `imageKey` é o que registramos no `this.load.image(...)`.
-- Sem colisão nesta iteração — só render + movimento livre em grid de 32px, servidor autoritativo via Colyseus.
-- Não mexer em CRUD, auth, nem outros painéis.
+- Tipo `PlayerVisual` ganha `tween?: Phaser.Tweens.Tween | null`.
+- `addPlayer`: cria container em `(p.x, p.y)` sem tween inicial (spawn instantâneo).
+- `removePlayer`: `v.tween?.stop()` antes de `container.destroy()`.
+- Câmera continua com `startFollow` no container local — o follow acompanha o tween naturalmente.
+- Latência: continua medida no primeiro `onChange` após um `send` local (já implementado).
 
 ## Fora de escopo
-- Colisão por tile.
-- Animações de sprite do personagem (continua retângulo colorido com nick).
-- Editor de mapa no /dev.
+- Animação de sprite andando (frames de walk).
+- Path finding / clique-para-andar.
+- Colisão por tile no cliente (servidor é autoritativo).
+- Mudanças no schema Colyseus ou no servidor.
