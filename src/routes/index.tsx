@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { GameShell } from "@/components/game/GameShell";
+import { TibiaShell } from "@/components/tibia/TibiaShell";
 
 export const Route = createFileRoute("/")({
   component: Index,
 });
 
 function Index() {
-  return <GameShell />;
+  return <TibiaShell />;
 }
