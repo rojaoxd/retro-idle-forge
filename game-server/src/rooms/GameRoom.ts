@@ -3,6 +3,7 @@ import { Schema, MapSchema, type } from "@colyseus/schema";
 import { WorldCache } from "../cache/WorldCache.js";
 import { PlayerWriter } from "../persistence/PlayerWriter.js";
 import { Logger } from "../persistence/Logger.js";
+import { supabase } from "../supabase.js";
 
 const TILE = 32;
 const STEP_MS = 450; // servidor um pouco mais permissivo que o tween do client (500ms)
@@ -28,7 +29,7 @@ class WorldState extends Schema {
   @type("string") motd = "";
 }
 
-type JoinOpts = { name?: string };
+type JoinOpts = { name?: string; characterId?: string; accessToken?: string };
 type Direction = "up" | "down" | "left" | "right";
 const DIRS: Record<Direction, { dx: number; dy: number }> = {
   up: { dx: 0, dy: -1 },
@@ -81,22 +82,44 @@ export class GameRoom extends Room<WorldState> {
     this.onMessage("map:sync", () => {});
   }
 
-  onJoin(client: Client, opts: JoinOpts) {
+  async onJoin(client: Client, opts: JoinOpts) {
     if (WorldCache.serverStatus() === "maintenance") {
       throw new Error("Servidor em manutenção");
     }
+    if (!opts?.characterId || !opts?.accessToken) {
+      throw new Error("Personagem ou sessão inválida");
+    }
+
+    const { data: authData, error: authError } = await supabase().auth.getUser(opts.accessToken);
+    if (authError || !authData.user) {
+      throw new Error("Sessão inválida");
+    }
+
+    const { data: character, error: characterError } = await supabase()
+      .from("characters")
+      .select("id,name,pos_x,pos_y,pos_z,hp")
+      .eq("id", opts.characterId)
+      .eq("user_id", authData.user.id)
+      .maybeSingle();
+
+    if (characterError || !character) {
+      throw new Error("Personagem não encontrado");
+    }
+
     const p = new Player();
-    p.id = client.sessionId;
-    p.name = (opts?.name ?? "Player").slice(0, 20);
-    p.x = SPAWN_X * TILE;
-    p.y = SPAWN_Y * TILE;
-    p.z = SPAWN_Z;
+    p.id = character.id;
+    p.name = character.name;
+    p.x = Number(character.pos_x ?? SPAWN_X) * TILE;
+    p.y = Number(character.pos_y ?? SPAWN_Y) * TILE;
+    p.z = Number(character.pos_z ?? SPAWN_Z);
+    p.hp = Number(character.hp ?? 100);
     this.state.players.set(client.sessionId, p);
+    void supabase().from("characters").update({ last_login_at: new Date().toISOString() }).eq("id", p.id);
     Logger.push({
       level: "info",
       source: "colyseus",
       message: `player_join ${p.name}`,
-      meta: { session: client.sessionId, spawn: { x: SPAWN_X, y: SPAWN_Y, z: SPAWN_Z } },
+      meta: { session: client.sessionId, characterId: p.id, spawn: { x: p.x / TILE, y: p.y / TILE, z: p.z } },
     });
   }
 
