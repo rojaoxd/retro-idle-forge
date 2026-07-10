@@ -28,6 +28,9 @@ import { Route as DevItemsRouteImport } from './routes/dev.items'
 import { Route as DevCreaturesRouteImport } from './routes/dev.creatures'
 import { Route as DevConfigRouteImport } from './routes/dev.config'
 import { Route as AuthenticatedCharactersRouteImport } from './routes/_authenticated/characters'
+import { Route as AuthenticatedPlayCharacterIdRouteImport } from './routes/_authenticated/play.$characterId'
+import { Route as AuthenticatedGameCharacterIdRouteImport } from './routes/_authenticated/game.$characterId'
+import { Route as AuthenticatedCharactersNewRouteImport } from './routes/_authenticated/characters.new'
 
 const DevRoute = DevRouteImport.update({
   id: '/dev',
@@ -123,12 +126,30 @@ const AuthenticatedCharactersRoute = AuthenticatedCharactersRouteImport.update({
   path: '/characters',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPlayCharacterIdRoute =
+  AuthenticatedPlayCharacterIdRouteImport.update({
+    id: '/play/$characterId',
+    path: '/play/$characterId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedGameCharacterIdRoute =
+  AuthenticatedGameCharacterIdRouteImport.update({
+    id: '/game/$characterId',
+    path: '/game/$characterId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedCharactersNewRoute =
+  AuthenticatedCharactersNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedCharactersRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dev': typeof DevRouteWithChildren
-  '/characters': typeof AuthenticatedCharactersRoute
+  '/characters': typeof AuthenticatedCharactersRouteWithChildren
   '/dev/config': typeof DevConfigRoute
   '/dev/creatures': typeof DevCreaturesRoute
   '/dev/items': typeof DevItemsRoute
@@ -143,11 +164,14 @@ export interface FileRoutesByFullPath {
   '/dev/sprites': typeof DevSpritesRoute
   '/dev/vocations': typeof DevVocationsRoute
   '/dev/': typeof DevIndexRoute
+  '/characters/new': typeof AuthenticatedCharactersNewRoute
+  '/game/$characterId': typeof AuthenticatedGameCharacterIdRoute
+  '/play/$characterId': typeof AuthenticatedPlayCharacterIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/characters': typeof AuthenticatedCharactersRoute
+  '/characters': typeof AuthenticatedCharactersRouteWithChildren
   '/dev/config': typeof DevConfigRoute
   '/dev/creatures': typeof DevCreaturesRoute
   '/dev/items': typeof DevItemsRoute
@@ -162,6 +186,9 @@ export interface FileRoutesByTo {
   '/dev/sprites': typeof DevSpritesRoute
   '/dev/vocations': typeof DevVocationsRoute
   '/dev': typeof DevIndexRoute
+  '/characters/new': typeof AuthenticatedCharactersNewRoute
+  '/game/$characterId': typeof AuthenticatedGameCharacterIdRoute
+  '/play/$characterId': typeof AuthenticatedPlayCharacterIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -169,7 +196,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/dev': typeof DevRouteWithChildren
-  '/_authenticated/characters': typeof AuthenticatedCharactersRoute
+  '/_authenticated/characters': typeof AuthenticatedCharactersRouteWithChildren
   '/dev/config': typeof DevConfigRoute
   '/dev/creatures': typeof DevCreaturesRoute
   '/dev/items': typeof DevItemsRoute
@@ -184,6 +211,9 @@ export interface FileRoutesById {
   '/dev/sprites': typeof DevSpritesRoute
   '/dev/vocations': typeof DevVocationsRoute
   '/dev/': typeof DevIndexRoute
+  '/_authenticated/characters/new': typeof AuthenticatedCharactersNewRoute
+  '/_authenticated/game/$characterId': typeof AuthenticatedGameCharacterIdRoute
+  '/_authenticated/play/$characterId': typeof AuthenticatedPlayCharacterIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -206,6 +236,9 @@ export interface FileRouteTypes {
     | '/dev/sprites'
     | '/dev/vocations'
     | '/dev/'
+    | '/characters/new'
+    | '/game/$characterId'
+    | '/play/$characterId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -225,6 +258,9 @@ export interface FileRouteTypes {
     | '/dev/sprites'
     | '/dev/vocations'
     | '/dev'
+    | '/characters/new'
+    | '/game/$characterId'
+    | '/play/$characterId'
   id:
     | '__root__'
     | '/'
@@ -246,6 +282,9 @@ export interface FileRouteTypes {
     | '/dev/sprites'
     | '/dev/vocations'
     | '/dev/'
+    | '/_authenticated/characters/new'
+    | '/_authenticated/game/$characterId'
+    | '/_authenticated/play/$characterId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -390,15 +429,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCharactersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/play/$characterId': {
+      id: '/_authenticated/play/$characterId'
+      path: '/play/$characterId'
+      fullPath: '/play/$characterId'
+      preLoaderRoute: typeof AuthenticatedPlayCharacterIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/game/$characterId': {
+      id: '/_authenticated/game/$characterId'
+      path: '/game/$characterId'
+      fullPath: '/game/$characterId'
+      preLoaderRoute: typeof AuthenticatedGameCharacterIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/characters/new': {
+      id: '/_authenticated/characters/new'
+      path: '/new'
+      fullPath: '/characters/new'
+      preLoaderRoute: typeof AuthenticatedCharactersNewRouteImport
+      parentRoute: typeof AuthenticatedCharactersRoute
+    }
   }
 }
 
+interface AuthenticatedCharactersRouteChildren {
+  AuthenticatedCharactersNewRoute: typeof AuthenticatedCharactersNewRoute
+}
+
+const AuthenticatedCharactersRouteChildren: AuthenticatedCharactersRouteChildren =
+  {
+    AuthenticatedCharactersNewRoute: AuthenticatedCharactersNewRoute,
+  }
+
+const AuthenticatedCharactersRouteWithChildren =
+  AuthenticatedCharactersRoute._addFileChildren(
+    AuthenticatedCharactersRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedCharactersRoute: typeof AuthenticatedCharactersRoute
+  AuthenticatedCharactersRoute: typeof AuthenticatedCharactersRouteWithChildren
+  AuthenticatedGameCharacterIdRoute: typeof AuthenticatedGameCharacterIdRoute
+  AuthenticatedPlayCharacterIdRoute: typeof AuthenticatedPlayCharacterIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedCharactersRoute: AuthenticatedCharactersRoute,
+  AuthenticatedCharactersRoute: AuthenticatedCharactersRouteWithChildren,
+  AuthenticatedGameCharacterIdRoute: AuthenticatedGameCharacterIdRoute,
+  AuthenticatedPlayCharacterIdRoute: AuthenticatedPlayCharacterIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
