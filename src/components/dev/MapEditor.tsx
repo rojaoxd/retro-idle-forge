@@ -483,11 +483,44 @@ export function MapEditor() {
             ))}
           </svg>
 
-          {/* Tiles do andar atual */}
-          {(["floor", "obstacles", "spawn"] as Layer[]).map((lyr) =>
-            Array.from(byCell.values())
-              .filter((t) => t.z === z && t.layer === lyr)
-              .map((t) => {
+          {/* Tiles do andar atual (server + draft) */}
+          {(() => {
+            const cells: Array<{ t: TileRow; pending: "put" | "del" | null }> = [];
+            const seen = new Set<string>();
+            for (const [k, d] of draft) {
+              if (!k.startsWith(`${z}:`)) continue;
+              seen.add(k);
+              if (d.op === "put") {
+                cells.push({
+                  t: {
+                    id: `draft:${k}`, x: d.x, y: d.y, z: d.z, layer: d.layer,
+                    tile_id: d.tile_id, blocking: d.blocking,
+                    spawn_monster_id: d.spawn_monster_id ?? null,
+                  }, pending: "put",
+                });
+              }
+            }
+            for (const t of byCell.values()) {
+              if (t.z !== z) continue;
+              const k = `${t.z}:${t.layer}:${t.x}:${t.y}`;
+              if (seen.has(k)) continue; // overridden by draft
+              const d = draft.get(k);
+              cells.push({ t, pending: d?.op === "del" ? "del" : null });
+            }
+            return (["floor", "obstacles", "spawn"] as Layer[]).flatMap((lyr) =>
+              cells.filter((c) => c.t.layer === lyr).map(({ t, pending }) => {
+                if (pending === "del") {
+                  return (
+                    <div key={`del:${t.layer}:${t.x}:${t.y}`}
+                      className="pointer-events-none absolute"
+                      style={{
+                        left: t.x * TILE, top: t.y * TILE, width: TILE, height: TILE,
+                        background: "rgba(239,68,68,0.25)",
+                        outline: "1px dashed rgba(239,68,68,0.8)",
+                        zIndex: lyr === "floor" ? 1 : lyr === "obstacles" ? 2 : 3,
+                      }} />
+                  );
+                }
                 const sp = spriteById.get(t.tile_id);
                 if (!sp) return null;
                 const url = urlMap[sp.sheet_url];
@@ -501,23 +534,34 @@ export function MapEditor() {
                       backgroundPosition: `-${sp.x}px -${sp.y}px`,
                       backgroundSize: "auto",
                       imageRendering: "pixelated",
-                      outline: t.blocking
+                      outline: pending === "put"
+                        ? "1px dashed rgba(250,204,21,0.9)"
+                        : t.blocking
                         ? "1px solid rgba(239,68,68,0.6)"
                         : lyr === "spawn" ? "1px solid rgba(168,85,247,0.7)" : undefined,
                       zIndex: lyr === "floor" ? 1 : lyr === "obstacles" ? 2 : 3,
                     }} />
                 );
               }),
-          )}
+            );
+          })()}
 
-          {Array.from(byCell.values())
-            .filter((t) => t.z === z && t.layer === "spawn")
-            .map((t) => (
-              <div key={`skull:${t.x}:${t.y}`} className="pointer-events-none absolute grid place-items-center"
-                style={{ left: t.x * TILE, top: t.y * TILE, width: TILE, height: TILE, zIndex: 4 }}>
+          {/* Skulls do spawn (efetivo) */}
+          {Array.from(new Set<string>([
+            ...Array.from(byCell.values()).filter((t) => t.z === z && t.layer === "spawn").map((t) => `${t.x},${t.y}`),
+            ...Array.from(draft.values()).filter((d) => d.op === "put" && d.z === z && d.layer === "spawn").map((d) => `${d.x},${d.y}`),
+          ])).map((k) => {
+            const [xs, ys] = k.split(",");
+            const x = Number(xs), y = Number(ys);
+            const drk = cellKey(x, y, z, "spawn");
+            if (draft.get(drk)?.op === "del") return null;
+            return (
+              <div key={`skull:${x}:${y}`} className="pointer-events-none absolute grid place-items-center"
+                style={{ left: x * TILE, top: y * TILE, width: TILE, height: TILE, zIndex: 4 }}>
                 <Skull className="h-4 w-4 text-purple-300 drop-shadow" />
               </div>
-            ))}
+            );
+          })}
         </div>
       </div>
     </div>
