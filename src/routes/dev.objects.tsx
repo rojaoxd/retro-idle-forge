@@ -673,39 +673,142 @@ function TilePreview({ tiles, cols }: { tiles: Tile[]; cols: number }) {
 
 /* ============================ Import OBD ============================ */
 
-function ImportObdDialog({ onClose }: { onClose: () => void }) {
-  const [result, setResult] = useState<ReturnType<typeof parseObd> | null>(null);
+function ImportObdDialog({ onClose, category, onImported }: { onClose: () => void; category: Category; onImported: () => void }) {
+  const importFn = useServerFn(importSpriteSheet);
+  const createFullFn = useServerFn(importObjectFull);
+  const nextIdFn = useServerFn(nextClientId);
+  const defaultKind = CATEGORIES.find((c) => c.id === category)!.defaultKind;
+  const isMissile = category === "missiles";
+
+  const [result, setResult] = useState<Extract<ObdParseResult, { ok: true }> | null>(null);
+  const [tiles, setTiles] = useState<{ hash: string; base64Png: string; width: number; height: number; index: number }[]>([]);
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [fileName, setFileName] = useState("");
 
   async function pick(f: File) {
-    const buf = await f.arrayBuffer();
-    setResult(parseObd(buf));
+    setError(null); setResult(null); setTiles([]);
+    setFileName(f.name);
+    setName(f.name.replace(/\.obd$/i, ""));
+    setBusy(true);
+    try {
+      const buf = await f.arrayBuffer();
+      const r = await parseObd(buf);
+      if (!r.ok) { setError(r.reason); return; }
+      setResult(r);
+      // Convert ARGB sprites to PNG tiles for upload
+      const ts = await Promise.all(r.sprites.map((s, i) => spriteToTile(s, i)));
+      setTiles(ts);
+    } catch (e: any) {
+      setError(e.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doImport() {
+    if (!result || !tiles.length) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { spriteIds } = await importFn({
+        data: { tiles, tagPrefix: name.toLowerCase().replace(/\s+/g, "_") },
+      });
+      const g = result.geometry;
+      const cells = tilesToComposition(tiles, {
+        width: g.width, height: g.height, layers: g.layers,
+        pattern_x: g.patternX, pattern_y: g.patternY, pattern_z: g.patternZ,
+        frames: g.frames,
+      }).map((c) => ({
+        sprite_id: spriteIds[c.sprite_id_index],
+        cell_x: c.cell_x, cell_y: c.cell_y, layer: c.layer,
+        pattern_x: c.pattern_x, pattern_y: c.pattern_y, pattern_z: c.pattern_z,
+        frame: c.frame,
+      }));
+      let cid: number | null = null;
+      try { cid = (await nextIdFn({ data: { object_kind: defaultKind as any } })).next; } catch {}
+
+      const avgDuration = g.durations.length
+        ? Math.round(g.durations.reduce((s, d) => s + (d.min + d.max) / 2, 0) / g.durations.length)
+        : 250;
+
+      await createFullFn({
+        data: {
+          object: {
+            name,
+            object_kind: defaultKind as any,
+            client_id: cid,
+            width: g.width, height: g.height, layers: g.layers,
+            pattern_x: g.patternX, pattern_y: g.patternY, pattern_z: g.patternZ,
+            frames: g.frames, frame_duration_ms: avgDuration,
+            flags: isMissile ? { isMissile: true } : {},
+            palette_group: null,
+          },
+          cells,
+        },
+      });
+      onImported();
+      onClose();
+    } catch (e: any) {
+      setError(e.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Importar arquivo .obd</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <input type="file" accept=".obd" onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])} />
+          {fileName && <div className="text-xs text-slate-400">Arquivo: <b>{fileName}</b></div>}
+          {busy && !result && <div className="text-xs text-slate-400">Descomprimindo e decodificando…</div>}
+          {error && (
+            <div className="rounded border border-red-700 bg-red-950/40 p-2 text-xs text-red-300">{error}</div>
+          )}
           {result && (
-            <div className="dev-inset p-3 text-xs space-y-1">
-              <div>Versão detectada: <b>{result.version}</b></div>
-              <div>Categoria: <b>{result.category}</b></div>
-              <div>Tamanho: <b>{result.raw.length} bytes</b></div>
-              {!result.supported && (
-                <div className="mt-2 rounded border border-yellow-700 bg-yellow-950/40 p-2 text-yellow-300">
-                  {result.reason}
+            <>
+              <div className="dev-inset p-3 text-xs space-y-1">
+                <div className="grid grid-cols-4 gap-2">
+                  <div>W×H: <b>{result.geometry.width}×{result.geometry.height}</b></div>
+                  <div>Layers: <b>{result.geometry.layers}</b></div>
+                  <div>Frames: <b>{result.geometry.frames}</b></div>
+                  <div>Sprites: <b>{result.sprites.length}</b></div>
+                  <div>Pat.X: <b>{result.geometry.patternX}</b></div>
+                  <div>Pat.Y: <b>{result.geometry.patternY}</b></div>
+                  <div>Pat.Z: <b>{result.geometry.patternZ}</b></div>
+                  <div>Exact: <b>{result.geometry.exactSize}</b></div>
                 </div>
-              )}
-            </div>
+                {result.geometry.durations.length > 0 && (
+                  <div className="text-slate-400">
+                    Durações: {result.geometry.durations.map((d, i) => `${i}=${d.min}${d.min !== d.max ? `-${d.max}` : ""}ms`).join(", ")}
+                  </div>
+                )}
+                <div className="text-slate-500">Props opacos: {result.propertiesBlob.length} bytes (não decodificados)</div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase text-slate-400">Nome do objeto</label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+
+              <TilePreview tiles={tiles as any} cols={Math.min(tiles.length, 12)} />
+            </>
           )}
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Fechar</Button>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={doImport} disabled={!result || !name || busy}
+            style={{ background: "var(--dev-accent)", color: "#052e2b" }}>
+            {busy ? "Importando…" : "Importar e criar objeto"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+
