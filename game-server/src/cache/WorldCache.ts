@@ -15,7 +15,7 @@ export type Tile = {
   layer: string;
   object_id: string | null;
   blocking: boolean;
-  spawn_point: boolean;
+  spawn_monster_id: string | null;
 };
 
 export type GameObject = {
@@ -64,7 +64,7 @@ class WorldCacheImpl {
     while (true) {
       const { data, error } = await supabase()
         .from("map_tiles")
-        .select("id,x,y,z,layer,object_id,blocking,spawn_point")
+        .select("id,x,y,z,layer,object_id,blocking,spawn_monster_id")
         .range(from, from + PAGE - 1);
       if (error) throw error;
       if (!data || data.length === 0) break;
