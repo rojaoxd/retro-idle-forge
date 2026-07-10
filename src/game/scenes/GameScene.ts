@@ -86,6 +86,8 @@ export class GameScene extends Phaser.Scene {
       "W" | "A" | "S" | "D",
       Phaser.Input.Keyboard.Key
     >;
+    // Impede que setas/WASD façam scroll da página (iframe do preview).
+    this.input.keyboard!.addCapture("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE");
     this.cameras.main.setZoom(2);
     this.cameras.main.roundPixels = true;
 
