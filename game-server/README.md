@@ -1,9 +1,12 @@
 # OldDungeons — Game Server (Colyseus + Supabase)
 
-Servidor autoritativo do MMORPG. Roda na AWS Lightsail (`54.233.23.67:2567`)
+Servidor autoritativo do MMORPG. Roda na AWS Lightsail (`54.207.144.3:2567`)
 e lê **todo o conteúdo do jogo direto do Supabase** — nada mais fica em
 arquivos locais. Tudo o que o admin edita no painel `/dev` do site é
 refletido no servidor em segundos, via Realtime.
+
+> O cliente web sempre conecta via `wss://fibula.pro` (que resolve para
+> `54.207.144.3`). O IP direto é apenas para SSH e administração do host.
 
 ## Regras de conexão com Supabase (importante)
 
