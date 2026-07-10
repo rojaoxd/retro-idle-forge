@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import type { Room } from "colyseus.js";
+import { getStateCallbacks, type Room } from "colyseus.js";
 import { getMapTiles } from "@/lib/game/map.functions";
 
 const TILE = 32;
@@ -11,10 +11,24 @@ const SPAWN_Y = Number(import.meta.env.VITE_SPAWN_Y ?? 10);
 
 type PlayerLike = { x: number; y: number; name: string };
 type PlayersMap = {
-  onAdd: (cb: (player: PlayerLike, sessionId: string) => void) => void;
-  onRemove: (cb: (player: PlayerLike, sessionId: string) => void) => void;
+  onAdd?: (cb: (player: PlayerLike, sessionId: string) => void) => void;
+  onRemove?: (cb: (player: PlayerLike, sessionId: string) => void) => void;
   get: (sessionId: string) => PlayerLike | undefined;
   forEach: (cb: (player: PlayerLike, sessionId: string) => void) => void;
+};
+
+type PlayersCallbacks = {
+  onAdd: (cb: (player: PlayerLike, sessionId: string) => void, immediate?: boolean) => void;
+  onRemove: (cb: (player: PlayerLike, sessionId: string) => void) => void;
+};
+
+type PlayerCallbacks = {
+  listen: (field: "x" | "y" | "name", cb: (value: unknown, previousValue: unknown) => void) => void;
+};
+
+type StateCallbackProxy = {
+  (target: { players?: PlayersMap }): { players?: PlayersCallbacks };
+  (target: PlayerLike): PlayerCallbacks;
 };
 
 type PlayerVisual = {
@@ -64,6 +78,7 @@ export class GameScene extends Phaser.Scene {
   private mapRows = 30;
   private mapReady = false;
   private pendingRoom: Room | null = null;
+  private wiredRoom: Room | null = null;
   private sheetKeyByUrl = new Map<string, string>();
   private fallbackPlayer: Phaser.GameObjects.Container | null = null;
   private characterName = "Player";
@@ -265,12 +280,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   private wireRoom(room: Room) {
+    if (this.wiredRoom === room) return;
+
     const state = room.state as { players?: PlayersMap };
     const players = state?.players;
     if (!players) {
       room.onStateChange.once(() => this.wireRoom(room));
       return;
     }
+
+    const callbacks = getStateCallbacks(room) as unknown as StateCallbackProxy | undefined;
+    const playersCallbacks = callbacks?.(state).players;
+    this.wiredRoom = room;
 
     const addPlayer = (p: PlayerLike, sessionId: string) => {
       if (this.players.has(sessionId)) return;
@@ -315,7 +336,15 @@ export class GameScene extends Phaser.Scene {
           this.lastMoveSentAt = 0;
         }
       };
-      if (typeof anyPlayer.onChange === "function") anyPlayer.onChange(update);
+      if (callbacks) {
+        const playerCallbacks = callbacks(p);
+        playerCallbacks.listen("x", update);
+        playerCallbacks.listen("y", update);
+        playerCallbacks.listen("name", () => {
+          const v = this.players.get(sessionId);
+          if (v) v.label.setText(p.name ?? "?");
+        });
+      } else if (typeof anyPlayer.onChange === "function") anyPlayer.onChange(update);
       else if (typeof anyPlayer.listen === "function") {
         anyPlayer.listen("x", update);
         anyPlayer.listen("y", update);
@@ -331,9 +360,22 @@ export class GameScene extends Phaser.Scene {
       this.players.delete(sessionId);
     };
 
-    players.onAdd(addPlayer);
-    players.onRemove(removePlayer);
-    players.forEach(addPlayer);
+    if (playersCallbacks) {
+      playersCallbacks.onAdd(addPlayer);
+      playersCallbacks.onRemove(removePlayer);
+    } else if (typeof players.onAdd === "function" && typeof players.onRemove === "function") {
+      players.onAdd(addPlayer);
+      players.onRemove(removePlayer);
+      players.forEach(addPlayer);
+    } else {
+      players.forEach(addPlayer);
+      room.onStateChange(() => {
+        players.forEach(addPlayer);
+        for (const sessionId of this.players.keys()) {
+          if (!players.get(sessionId)) removePlayer({ x: 0, y: 0, name: "" }, sessionId);
+        }
+      });
+    }
   }
 
   update(_time: number, deltaMs: number) {
