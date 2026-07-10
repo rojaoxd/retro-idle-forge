@@ -227,8 +227,8 @@ export class GameScene extends Phaser.Scene {
         resolve();
       };
 
-      this.load.once(Phaser.Loader.Events.COMPLETE, done);
-      this.load.once(Phaser.Loader.Events.LOAD_ERROR, done);
+      this.load.once("complete", done);
+      this.load.once("loaderror", done);
       this.load.start();
     });
   }
