@@ -389,7 +389,7 @@ export class GameScene extends Phaser.Scene {
     };
 
     if (playersCallbacks) {
-      playersCallbacks.onAdd(addPlayer);
+      playersCallbacks.onAdd(addPlayer, true);
       playersCallbacks.onRemove(removePlayer);
     } else if (typeof players.onAdd === "function" && typeof players.onRemove === "function") {
       players.onAdd(addPlayer);
