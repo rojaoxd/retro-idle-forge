@@ -1,122 +1,64 @@
 ## Objetivo
 
-Fazer o servidor Colyseus na AWS (Lightsail `54.233.23.67`) parar de ler arquivos locais e passar a ler **tudo do Supabase** (`map_tiles`, `game_objects`, `server_configs`, `monsters`, `spells`, `scripts_*`, `npcs`, etc.), com **uma única conexão compartilhada** via Supavisor (pooler), cache em memória e writes em lote — nunca "uma conexão por jogador".
+Permitir logar → cair no mapa → andar. Editor de mapa passa a ter Salvar manual.
 
-O código do servidor vai viver **dentro deste próprio projeto Lovable**, numa pasta nova `game-server/`, e o deploy pra AWS é feito com **um único comando** (`git pull && pm2 restart`). Depois da configuração inicial, você nunca mais precisa mexer no Linux.
+## 1. Spawn fixo do jogador (game-server)
 
----
+- Ler spawn de `server_configs` (chaves `spawn_x`, `spawn_y`, `spawn_z`), com fallback `10,10,7`. Cache já existe em `WorldCache`; adicionar `WorldCache.spawnPoint()`.
+- `GameRoom.onJoin`: setar `p.x = spawn.x * TILE`, `p.y = spawn.y * TILE`, `p.z = spawn.z` (o client já trata `x/y` em pixels).
+- Persistir posição do jogador em `PlayerWriter` já em tiles (dividir por TILE ao salvar; guardar TILE constante compartilhada).
 
-## Arquitetura (visão do usuário)
+## 2. Movimentação — padronizar protocolo
 
-```text
- Navegador (Lovable)  ─ws─▶  Colyseus (AWS Lightsail)
-                                │
-                                ▼  (1 pool compartilhado, Supavisor)
-                              Supabase  ◀── Painel /dev (admin)
-```
+Hoje: client envia `{direction}`, server espera `{x,y}` em tiles e não avança nada em pixels. Vamos alinhar em **tiles no server, pixels no client**.
 
-- **Leitura**: Colyseus carrega mapa/configs **uma vez** no boot + escuta `postgres_changes` para recarregar quando o admin editar no painel.
-- **Escrita**: posição/HP dos jogadores fica em memória; salva em Supabase a cada N segundos em batch (`upsert` em array), nunca a cada tick.
-- **Conexões**: 1 client Supabase (service role) por processo, apontando pro **pooler transaction mode** do Supavisor. 1.000 jogadores = 1 conexão TCP, não 1.000.
+- Constante `TILE = 32` compartilhada (nova `game-server/src/constants.ts`).
+- `Player.x/y` no state = **pixels** (para tween linear no client, como já é).
+- Handler `move` do servidor: aceita `{ direction: "up"|"down"|"left"|"right" }`.
+  - Calcula `nextTileX = round(p.x / TILE) + dx`, idem Y.
+  - Rejeita se `WorldCache.isBlocking(nextTileX, nextTileY, p.z)` ou fora do mapa.
+  - Rate-limit server-side ~450ms/step (autoridade: client anima 500ms).
+  - Atualiza `p.x = nextTileX * TILE`, `p.y = nextTileY * TILE`.
+- Manter mensagem `map:sync` que o client envia como no-op por enquanto (WorldCache já lê do Supabase).
 
----
+## 3. Editor de mapa — Salvar manual
 
-## Estrutura de arquivos (novos, neste repo)
+Refatorar `MapEditor.tsx` para operar em **buffer local**:
 
-```text
-game-server/
-  package.json            # deps próprias: colyseus, @colyseus/ws-transport, @supabase/supabase-js, dotenv
-  tsconfig.json
-  ecosystem.config.cjs    # pm2: 1 processo, autorestart, logs
-  src/
-    index.ts              # boot: express + WebSocketTransport na porta 2567
-    supabase.ts           # createClient(SERVICE_ROLE) singleton, usa POOLER_URL
-    cache/
-      WorldCache.ts       # carrega map_tiles/game_objects/server_configs 1x, expõe getters síncronos
-      subscriptions.ts    # supabase.channel() em map_tiles, game_objects, server_configs → WorldCache.reload(tabela)
-    rooms/
-      GameRoom.ts         # onCreate lê WorldCache (não Supabase); onJoin valida player; onLeave persiste
-    persistence/
-      PlayerWriter.ts     # fila in-memory; flush a cada 5s com upsert em array (1 request p/ N jogadores)
-      Logger.ts           # insert em server_logs em batch
-  .env.example            # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_POOLER_URL, PORT=2567
-  README.md               # passo-a-passo AWS (abaixo)
-```
+- Estado novo: `draft: Map<cellKey, TileRow|null>` (null = marcado para deletar) e `dirty: boolean`.
+- `paintCell`, `eraseCell`, `fillFrom`, `pickAt` passam a mutar `draft` (não chamam `mutate` mais).
+- Render do canvas combina `byCell` (do servidor) com `draft` sobrepondo.
+- Barra superior nova com:
+  - **Salvar** (habilitado se `dirty`): envia dois lotes — `paintMapTiles` para upserts e `deleteMapTilesBulk` para deletes. Após sucesso: `invalidateQueries` + limpar `draft`.
+  - **Descartar** (limpa `draft`).
+  - Indicador "N alterações pendentes".
+- `beforeunload` warn se `dirty`.
+- Trocar Z ou layer com `dirty`: pedir confirmação (senão perde edições — draft é por-cell independente de Z, então na prática mantemos, mas Z afeta o que o usuário vê).
 
-Nada no `src/` do frontend muda. `src/net/colyseus.ts` continua apontando pro mesmo IP/porta.
+Nenhuma mudança em `map.functions.ts` do server (as ações `paintMapTiles`/`deleteMapTilesBulk` já suportam lote).
 
----
+## 4. Recarga do WorldCache
 
-## Regras técnicas (o "alerta" que você pediu)
+Após Salvar no editor, chamar `WorldCache.reload()` no game-server. Como o editor é frontend e o game-server é AWS, adicionar:
 
-1. **1 client Supabase por processo**, criado em `supabase.ts` como singleton. Proibido `createClient()` dentro de `onJoin`/`onMessage`.
-2. **URL obrigatória = Supavisor pooler** (`aws-0-…pooler.supabase.com:6543`, transaction mode). Nunca a URL direta `db.<ref>.supabase.co:5432`.
-3. **Leituras "quentes" (a cada tick) vêm do WorldCache**, não do Supabase. O cache só recarrega quando `postgres_changes` avisa.
-4. **Escritas em batch**: `PlayerWriter` acumula posição/HP por 5s e faz **1 `upsert`** com array. `server_logs` idem.
-5. **Sem realtime por jogador**: só o servidor assina canais Supabase; jogadores recebem estado via schema do Colyseus.
+- Server-route público `/api/public/reload-world` (verifica header `x-reload-secret` contra `WORLD_RELOAD_SECRET`). Handler apenas faz `fetch` para o game-server (`https://fibula.pro/admin/reload`).
+- No game-server: rota HTTP simples `POST /admin/reload` protegida pelo mesmo secret que dispara `WorldCache.reload()`.
+- Alternativa mais simples se preferir: `WorldCache` já tem subscription em `map_tiles`; se estiver funcional, pular esta etapa e o mapa recarrega sozinho ao salvar. **Confirmarei olhando `game-server/src/cache/subscriptions.ts` antes de implementar; se já houver Realtime, Salvar do editor basta.**
 
----
+## 5. Fluxo do usuário após login
 
-## Deploy na AWS (uma única vez, depois nunca mais)
+Já existe: `/` → `TibiaShell` → `PhaserCanvas` → `joinGameRoom`. Com (1) e (2) prontos, logar cai direto no mapa no spawn e WASD/setas movem o boneco.
 
-Comandos que você cola no terminal da Lightsail (o print que enviou). Cada bloco é 1 cópia-cola.
+## Arquivos afetados
 
-```bash
-# 1. Node 20 + pm2 (se ainda não tiver)
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-sudo npm i -g pm2
+- `game-server/src/rooms/GameRoom.ts` — spawn + protocolo move
+- `game-server/src/cache/WorldCache.ts` — `spawnPoint()`
+- `game-server/src/constants.ts` (novo) — TILE
+- `game-server/src/index.ts` — rota `/admin/reload` (se necessário)
+- `src/components/dev/MapEditor.tsx` — buffer + botão Salvar
+- (opcional) `src/routes/api/public/reload-world.ts`
 
-# 2. Clonar o projeto Lovable (só a pasta game-server é usada)
-cd ~
-git clone https://github.com/<seu-usuario>/<seu-repo>.git olddungeons
-cd olddungeons/game-server
-npm install
-npm run build
+## Notas técnicas
 
-# 3. Criar .env (uma vez)
-cp .env.example .env
-nano .env   # colar SUPABASE_URL, SERVICE_ROLE_KEY e POOLER_URL
-
-# 4. Subir com pm2 e travar no boot
-pm2 start ecosystem.config.cjs
-pm2 save
-pm2 startup    # e cola a linha que ele imprimir
-
-# 5. Firewall Lightsail: liberar TCP 2567 (painel AWS, aba Networking)
-```
-
-**Atualizações futuras** (depois de mudar código pelo Lovable):
-
-```bash
-cd ~/olddungeons && git pull && cd game-server && npm install && npm run build && pm2 restart all
-```
-
----
-
-## Migração/Supabase
-
-Nenhuma migração de schema — todas as tabelas necessárias já existem (`map_tiles`, `game_objects`, `server_configs`, `monsters`, `spells`, `scripts_actions`, `scripts_movements`, `npcs`, `online_players`, `server_logs`).
-
-Único ajuste: habilitar Realtime nas tabelas que o WorldCache observa (se ainda não estiver):
-
-```sql
-ALTER PUBLICATION supabase_realtime ADD TABLE public.map_tiles, public.game_objects, public.server_configs;
-```
-
-Isso é aplicado via ferramenta de migração no momento do build.
-
----
-
-## O que **não** entra neste passo
-
-- Executar de fato os scripts Lua salvos em `scripts_actions`/`scripts_movements` (só carregamos os textos; execução real é um passo separado).
-- Combate/monstros/loot com lógica completa — só a estrutura de leitura do cache fica pronta; regras de jogo evoluem depois.
-- CI/CD automático AWS ↔ GitHub — por enquanto é `git pull` manual.
-
----
-
-## Perguntas rápidas antes de implementar
-
-1. Você quer que eu **crie o repositório do servidor dentro deste mesmo projeto Lovable** (pasta `game-server/`, deploy via `git pull` na AWS) ou prefere que eu entregue os arquivos prontos e você cria o repo git separado? A primeira opção é a que descrevi acima e é a mais simples.
-2. Você já tem em mãos a **Connection String do Supavisor** (Supabase → Project Settings → Database → Connection Pooling → "Transaction" mode)? Preciso dela pra `.env` — se não tiver, eu te mostro onde clicar quando entrarmos no build.
+- O game-server roda na AWS; após alterar arquivos em `game-server/**` você precisa rebuild+restart lá (`pm2 restart` conforme `ecosystem.config.cjs`). Vou deixar isso claro ao final.
+- Sem mudança de schema no Supabase; usarei linhas existentes em `server_configs`.
