@@ -251,3 +251,127 @@ export const importObjectFull = createServerFn({ method: "POST" })
     return { object: obj };
   });
 
+/* ---------- Bulk import for tibia.dat/spr ---------- */
+
+const bulkTileSchema = z.object({
+  hash: z.string().min(8),
+  base64Png: z.string().min(4),
+});
+
+const bulkObjectSchema = z.object({
+  name: z.string().min(1),
+  object_kind: z.enum([
+    "item", "ground", "container", "weapon", "armor",
+    "fluid", "splash", "deco", "creature", "wall", "effect",
+  ]),
+  client_id: z.number().int(),
+  width: z.number().int().min(1).max(4),
+  height: z.number().int().min(1).max(4),
+  layers: z.number().int().min(1),
+  pattern_x: z.number().int().min(1),
+  pattern_y: z.number().int().min(1),
+  pattern_z: z.number().int().min(1),
+  frames: z.number().int().min(1),
+  frame_duration_ms: z.number().int().default(500),
+  flags: z.record(z.string(), z.any()).default({}),
+  cells: z.array(z.object({
+    tile_hash: z.string(),
+    layer: z.number().int(),
+    pattern_x: z.number().int(),
+    pattern_y: z.number().int(),
+    pattern_z: z.number().int(),
+    frame: z.number().int(),
+    cell_x: z.number().int(),
+    cell_y: z.number().int(),
+  })),
+});
+
+const importBulkSchema = z.object({
+  sprites: z.array(bulkTileSchema).max(3000),
+  objects: z.array(bulkObjectSchema).max(500),
+  tagPrefix: z.string().default("tibia74"),
+});
+
+export const importTibiaBatch = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((raw) => importBulkSchema.parse(raw))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const supa = context.supabase as any;
+
+    const uniq = new Map<string, { hash: string; base64Png: string }>();
+    for (const s of data.sprites) if (!uniq.has(s.hash)) uniq.set(s.hash, s);
+
+    const hashes = Array.from(uniq.keys());
+    const idByHash = new Map<string, number>();
+    if (hashes.length) {
+      const { data: existing, error: exErr } = await supa
+        .from("game_sprites").select("id, hash").in("hash", hashes);
+      if (exErr) throw new Error(exErr.message);
+      for (const r of existing ?? []) idByHash.set(r.hash, r.id);
+    }
+
+    const newRows: { hash: string; sheet_url: string }[] = [];
+    for (const [hash, t] of uniq) {
+      if (idByHash.has(hash)) continue;
+      const bytes = Uint8Array.from(atob(t.base64Png), (c) => c.charCodeAt(0));
+      const path = `imported/${hash}.png`;
+      const up = await supa.storage
+        .from(BUCKET).upload(path, bytes, { contentType: "image/png", upsert: true });
+      if (up.error && !String(up.error.message).includes("exists")) {
+        throw new Error(up.error.message);
+      }
+      newRows.push({ hash, sheet_url: path });
+    }
+    if (newRows.length) {
+      const ins = await supa.from("game_sprites").insert(
+        newRows.map((r) => ({ ...r, x: 0, y: 0, width: 32, height: 32, tags: [data.tagPrefix] })),
+      ).select("id, hash");
+      if (ins.error) throw new Error(ins.error.message);
+      for (const r of ins.data ?? []) idByHash.set(r.hash, r.id);
+    }
+
+    let inserted = 0, updated = 0, skipped = 0;
+    for (const obj of data.objects) {
+      const { cells, ...row } = obj;
+      const { data: existing } = await supa
+        .from("game_objects").select("id")
+        .eq("object_kind", row.object_kind).eq("client_id", row.client_id).maybeSingle();
+
+      let objectId: string;
+      if (existing?.id) {
+        objectId = existing.id;
+        const upd = await supa.from("game_objects").update(row).eq("id", objectId);
+        if (upd.error) { skipped++; continue; }
+        updated++;
+        await supa.from("game_object_sprites").delete().eq("object_id", objectId);
+      } else {
+        const ins = await supa.from("game_objects").insert(row).select("id").single();
+        if (ins.error) { skipped++; continue; }
+        objectId = ins.data.id;
+        inserted++;
+      }
+
+      if (cells.length) {
+        const rows = cells.map((c) => ({
+          object_id: objectId,
+          sprite_id: idByHash.get(c.tile_hash) ?? 0,
+          layer: c.layer,
+          pattern_x: c.pattern_x, pattern_y: c.pattern_y, pattern_z: c.pattern_z,
+          frame: c.frame, cell_x: c.cell_x, cell_y: c.cell_y,
+        })).filter((r) => r.sprite_id > 0);
+        if (rows.length) {
+          const ci = await supa.from("game_object_sprites").insert(rows);
+          if (ci.error) skipped++;
+        }
+      }
+    }
+
+    return {
+      spritesUnique: idByHash.size,
+      spritesUploaded: newRows.length,
+      inserted, updated, skipped,
+    };
+  });
+
+
