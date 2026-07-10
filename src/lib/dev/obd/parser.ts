@@ -17,7 +17,7 @@
  * preserve them as an opaque blob and reconstruct geometry + sprites, which
  * is what the UI needs to display and animate the object.
  */
-import LZMA from "lzma";
+import LZMA from "lzma-web";
 
 export type ObdSprite = {
   id: number;
@@ -51,25 +51,11 @@ export type ObdParseResult = {
   reason: string;
 };
 
-function decompressLzma(bytes: Uint8Array): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    // The lzma package accepts a plain Array or Uint8Array and returns
-    // an Array of signed bytes via callback.
-    (LZMA as any).decompress(
-      bytes,
-      (result: any, err: any) => {
-        if (err) return reject(err instanceof Error ? err : new Error(String(err)));
-        if (typeof result === "string") {
-          // Fallback: convert utf8 string to bytes
-          const enc = new TextEncoder();
-          return resolve(enc.encode(result));
-        }
-        const arr = new Uint8Array(result.length);
-        for (let i = 0; i < result.length; i++) arr[i] = result[i] & 0xff;
-        resolve(arr);
-      },
-    );
-  });
+async function decompressLzma(bytes: Uint8Array): Promise<Uint8Array> {
+  const lzma = new LZMA();
+  const result = await lzma.decompress(bytes);
+  if (typeof result === "string") return new TextEncoder().encode(result);
+  return result;
 }
 
 /**

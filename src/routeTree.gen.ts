@@ -28,6 +28,7 @@ import { Route as DevItemsRouteImport } from './routes/dev.items'
 import { Route as DevCreaturesRouteImport } from './routes/dev.creatures'
 import { Route as DevConfigRouteImport } from './routes/dev.config'
 import { Route as AuthenticatedCharactersIndexRouteImport } from './routes/_authenticated/characters.index'
+import { Route as DevObjectsImportClientRouteImport } from './routes/dev.objects.import-client'
 import { Route as AuthenticatedPlayCharacterIdRouteImport } from './routes/_authenticated/play.$characterId'
 import { Route as AuthenticatedGameCharacterIdRouteImport } from './routes/_authenticated/game.$characterId'
 import { Route as AuthenticatedCharactersNewRouteImport } from './routes/_authenticated/characters.new'
@@ -127,6 +128,11 @@ const AuthenticatedCharactersIndexRoute =
     path: '/characters/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const DevObjectsImportClientRoute = DevObjectsImportClientRouteImport.update({
+  id: '/import-client',
+  path: '/import-client',
+  getParentRoute: () => DevObjectsRoute,
+} as any)
 const AuthenticatedPlayCharacterIdRoute =
   AuthenticatedPlayCharacterIdRouteImport.update({
     id: '/play/$characterId',
@@ -156,7 +162,7 @@ export interface FileRoutesByFullPath {
   '/dev/map': typeof DevMapRoute
   '/dev/monsters': typeof DevMonstersRoute
   '/dev/npcs': typeof DevNpcsRoute
-  '/dev/objects': typeof DevObjectsRoute
+  '/dev/objects': typeof DevObjectsRouteWithChildren
   '/dev/overview': typeof DevOverviewRoute
   '/dev/palettes': typeof DevPalettesRoute
   '/dev/scripts': typeof DevScriptsRoute
@@ -167,6 +173,7 @@ export interface FileRoutesByFullPath {
   '/characters/new': typeof AuthenticatedCharactersNewRoute
   '/game/$characterId': typeof AuthenticatedGameCharacterIdRoute
   '/play/$characterId': typeof AuthenticatedPlayCharacterIdRoute
+  '/dev/objects/import-client': typeof DevObjectsImportClientRoute
   '/characters/': typeof AuthenticatedCharactersIndexRoute
 }
 export interface FileRoutesByTo {
@@ -178,7 +185,7 @@ export interface FileRoutesByTo {
   '/dev/map': typeof DevMapRoute
   '/dev/monsters': typeof DevMonstersRoute
   '/dev/npcs': typeof DevNpcsRoute
-  '/dev/objects': typeof DevObjectsRoute
+  '/dev/objects': typeof DevObjectsRouteWithChildren
   '/dev/overview': typeof DevOverviewRoute
   '/dev/palettes': typeof DevPalettesRoute
   '/dev/scripts': typeof DevScriptsRoute
@@ -189,6 +196,7 @@ export interface FileRoutesByTo {
   '/characters/new': typeof AuthenticatedCharactersNewRoute
   '/game/$characterId': typeof AuthenticatedGameCharacterIdRoute
   '/play/$characterId': typeof AuthenticatedPlayCharacterIdRoute
+  '/dev/objects/import-client': typeof DevObjectsImportClientRoute
   '/characters': typeof AuthenticatedCharactersIndexRoute
 }
 export interface FileRoutesById {
@@ -203,7 +211,7 @@ export interface FileRoutesById {
   '/dev/map': typeof DevMapRoute
   '/dev/monsters': typeof DevMonstersRoute
   '/dev/npcs': typeof DevNpcsRoute
-  '/dev/objects': typeof DevObjectsRoute
+  '/dev/objects': typeof DevObjectsRouteWithChildren
   '/dev/overview': typeof DevOverviewRoute
   '/dev/palettes': typeof DevPalettesRoute
   '/dev/scripts': typeof DevScriptsRoute
@@ -214,6 +222,7 @@ export interface FileRoutesById {
   '/_authenticated/characters/new': typeof AuthenticatedCharactersNewRoute
   '/_authenticated/game/$characterId': typeof AuthenticatedGameCharacterIdRoute
   '/_authenticated/play/$characterId': typeof AuthenticatedPlayCharacterIdRoute
+  '/dev/objects/import-client': typeof DevObjectsImportClientRoute
   '/_authenticated/characters/': typeof AuthenticatedCharactersIndexRoute
 }
 export interface FileRouteTypes {
@@ -239,6 +248,7 @@ export interface FileRouteTypes {
     | '/characters/new'
     | '/game/$characterId'
     | '/play/$characterId'
+    | '/dev/objects/import-client'
     | '/characters/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -261,6 +271,7 @@ export interface FileRouteTypes {
     | '/characters/new'
     | '/game/$characterId'
     | '/play/$characterId'
+    | '/dev/objects/import-client'
     | '/characters'
   id:
     | '__root__'
@@ -285,6 +296,7 @@ export interface FileRouteTypes {
     | '/_authenticated/characters/new'
     | '/_authenticated/game/$characterId'
     | '/_authenticated/play/$characterId'
+    | '/dev/objects/import-client'
     | '/_authenticated/characters/'
   fileRoutesById: FileRoutesById
 }
@@ -430,6 +442,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCharactersIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/dev/objects/import-client': {
+      id: '/dev/objects/import-client'
+      path: '/import-client'
+      fullPath: '/dev/objects/import-client'
+      preLoaderRoute: typeof DevObjectsImportClientRouteImport
+      parentRoute: typeof DevObjectsRoute
+    }
     '/_authenticated/play/$characterId': {
       id: '/_authenticated/play/$characterId'
       path: '/play/$characterId'
@@ -471,6 +490,18 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface DevObjectsRouteChildren {
+  DevObjectsImportClientRoute: typeof DevObjectsImportClientRoute
+}
+
+const DevObjectsRouteChildren: DevObjectsRouteChildren = {
+  DevObjectsImportClientRoute: DevObjectsImportClientRoute,
+}
+
+const DevObjectsRouteWithChildren = DevObjectsRoute._addFileChildren(
+  DevObjectsRouteChildren,
+)
+
 interface DevRouteChildren {
   DevConfigRoute: typeof DevConfigRoute
   DevCreaturesRoute: typeof DevCreaturesRoute
@@ -478,7 +509,7 @@ interface DevRouteChildren {
   DevMapRoute: typeof DevMapRoute
   DevMonstersRoute: typeof DevMonstersRoute
   DevNpcsRoute: typeof DevNpcsRoute
-  DevObjectsRoute: typeof DevObjectsRoute
+  DevObjectsRoute: typeof DevObjectsRouteWithChildren
   DevOverviewRoute: typeof DevOverviewRoute
   DevPalettesRoute: typeof DevPalettesRoute
   DevScriptsRoute: typeof DevScriptsRoute
@@ -495,7 +526,7 @@ const DevRouteChildren: DevRouteChildren = {
   DevMapRoute: DevMapRoute,
   DevMonstersRoute: DevMonstersRoute,
   DevNpcsRoute: DevNpcsRoute,
-  DevObjectsRoute: DevObjectsRoute,
+  DevObjectsRoute: DevObjectsRouteWithChildren,
   DevOverviewRoute: DevOverviewRoute,
   DevPalettesRoute: DevPalettesRoute,
   DevScriptsRoute: DevScriptsRoute,

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -140,6 +140,11 @@ function ObjectsPage() {
         <Button size="sm" variant="secondary" onClick={() => setImportOpen("obd")}>
           <FileUp className="mr-1 h-4 w-4" /> Import .obd
         </Button>
+        <Link to="/dev/objects/import-client">
+          <Button size="sm" style={{ background: "var(--dev-accent)", color: "#052e2b" }}>
+            <FileUp className="mr-1 h-4 w-4" /> Tibia 7.4 (.dat+.spr)
+          </Button>
+        </Link>
       </div>
 
       {/* Category tabs */}
