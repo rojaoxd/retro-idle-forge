@@ -297,7 +297,10 @@ export class GameScene extends Phaser.Scene {
     const addPlayer = (p: PlayerLike, sessionId: string) => {
       if (this.players.has(sessionId)) return;
       const isMe = sessionId === room.sessionId;
-      const container = this.add.container(p.x, p.y);
+      // Sanidade: se o servidor mandou NaN, cai pro spawn (evita ficar no canto).
+      const safeX = Number.isFinite(p.x) ? p.x : SPAWN_X * TILE + TILE / 2;
+      const safeY = Number.isFinite(p.y) ? p.y : SPAWN_Y * TILE + TILE / 2;
+      const container = this.add.container(safeX, safeY);
       container.setDepth(10);
       const rect = this.add.rectangle(0, 0, TILE - 6, TILE - 6, isMe ? 0x4fa4ff : 0xd4b46a);
       rect.setStrokeStyle(1, 0x000000);
@@ -316,7 +319,8 @@ export class GameScene extends Phaser.Scene {
       if (isMe) {
         this.fallbackPlayer?.destroy();
         this.fallbackPlayer = null;
-        this.cameras.main.startFollow(container, true, 0.15, 0.15);
+        this.cameras.main.startFollow(container, true, 1, 1);
+        this.cameras.main.centerOn(container.x, container.y);
       }
 
       const anyPlayer = p as unknown as {
