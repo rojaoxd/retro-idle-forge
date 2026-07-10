@@ -29,7 +29,7 @@ export function PhaserCanvas() {
       if (destroyed || !hostRef.current) return;
 
       game = new Phaser.Game({
-        type: Phaser.AUTO,
+        type: Phaser.CANVAS,
         parent: hostRef.current,
         backgroundColor: "#000000",
         pixelArt: true,
