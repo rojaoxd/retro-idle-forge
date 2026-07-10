@@ -3,9 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
   listMapTiles,
-  upsertMapTile,
   paintMapTiles,
-  deleteMapTile,
   deleteMapTilesBulk,
 } from "@/lib/dev/map.functions";
 import { listSprites } from "@/lib/dev/sprites.functions";
