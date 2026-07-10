@@ -3,11 +3,29 @@ import { getStateCallbacks, type Room } from "colyseus.js";
 import { getMapTiles } from "@/lib/game/map.functions";
 
 const TILE = 32;
+const TILE_CENTER = TILE / 2;
 // Tibia 7.4: caminhada base em chão normal ~500ms/SQM.
 const STEP_MS = 500;
 
-const SPAWN_X = Number(import.meta.env.VITE_SPAWN_X ?? 10);
-const SPAWN_Y = Number(import.meta.env.VITE_SPAWN_Y ?? 10);
+const envNumber = (value: unknown, fallback: number) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const SPAWN_X = envNumber(import.meta.env.VITE_SPAWN_X, 10);
+const SPAWN_Y = envNumber(import.meta.env.VITE_SPAWN_Y, 10);
+
+function tileToPixel(tile: number) {
+  return tile * TILE + TILE_CENTER;
+}
+
+function pixelToTile(pixel: number) {
+  return Math.floor(pixel / TILE);
+}
+
+function isValidPixel(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value);
+}
 
 type PlayerLike = { x: number; y: number; name: string };
 type PlayersMap = {
@@ -115,7 +133,7 @@ export class GameScene extends Phaser.Scene {
       .finally(() => {
         this.mapReady = true;
         // Centraliza no spawn até termos player local
-        this.cameras.main.centerOn(SPAWN_X * TILE + TILE / 2, SPAWN_Y * TILE + TILE / 2);
+        this.cameras.main.centerOn(tileToPixel(SPAWN_X), tileToPixel(SPAWN_Y));
         // Room que chegou antes do mapa? Anexa agora.
         const r = this.pendingRoom ?? this.room;
         if (r) this.wireRoom(r);
@@ -158,8 +176,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showFallbackPlayer() {
-    const x = SPAWN_X * TILE + TILE / 2;
-    const y = SPAWN_Y * TILE + TILE / 2;
+    const x = tileToPixel(SPAWN_X);
+    const y = tileToPixel(SPAWN_Y);
     const container = this.add.container(x, y);
     container.setDepth(10);
 
@@ -179,6 +197,7 @@ export class GameScene extends Phaser.Scene {
 
     container.add([shadow, body, head, label]);
     this.fallbackPlayer = container;
+    this.cameras.main.setFollowOffset(0, 0);
     this.cameras.main.startFollow(container, true, 1, 1);
     this.cameras.main.centerOn(x, y);
   }
@@ -298,9 +317,9 @@ export class GameScene extends Phaser.Scene {
     const addPlayer = (p: PlayerLike, sessionId: string) => {
       if (this.players.has(sessionId)) return;
       const isMe = sessionId === room.sessionId;
-      // Sanidade: se o servidor mandou NaN, cai pro spawn (evita ficar no canto).
-      const safeX = Number.isFinite(p.x) ? p.x : SPAWN_X * TILE + TILE / 2;
-      const safeY = Number.isFinite(p.y) ? p.y : SPAWN_Y * TILE + TILE / 2;
+      // Sanidade: se o servidor mandou NaN/null, cai pro spawn (evita ficar no canto).
+      const safeX = isValidPixel(p.x) ? p.x : tileToPixel(SPAWN_X);
+      const safeY = isValidPixel(p.y) ? p.y : tileToPixel(SPAWN_Y);
       const container = this.add.container(safeX, safeY);
       container.setDepth(10);
       const rect = this.add.rectangle(0, 0, TILE - 6, TILE - 6, isMe ? 0x4fa4ff : 0xd4b46a);
@@ -320,6 +339,8 @@ export class GameScene extends Phaser.Scene {
       if (isMe) {
         this.fallbackPlayer?.destroy();
         this.fallbackPlayer = null;
+        this.cameras.main.stopFollow();
+        this.cameras.main.setFollowOffset(0, 0);
         this.cameras.main.startFollow(container, true, 1, 1);
         this.cameras.main.centerOn(container.x, container.y);
       }
@@ -334,6 +355,7 @@ export class GameScene extends Phaser.Scene {
         const data = v.tween?.data as Array<{ key: string; end: number }> | undefined;
         const targetX = data?.find((d) => d.key === "x")?.end ?? v.container.x;
         const targetY = data?.find((d) => d.key === "y")?.end ?? v.container.y;
+        if (!isValidPixel(p.x) || !isValidPixel(p.y)) return;
         if (Math.round(targetX) !== Math.round(p.x) || Math.round(targetY) !== Math.round(p.y)) {
           this.moveTo(v, p.x, p.y);
         }
@@ -440,10 +462,10 @@ export class GameScene extends Phaser.Scene {
 
     if (dir) {
       // Se o servidor ainda mandou posição inválida, usa a posição visual atual como referência.
-      const baseX = Number.isFinite(me.x) ? me.x : myVis.container.x;
-      const baseY = Number.isFinite(me.y) ? me.y : myVis.container.y;
-      const tileX = Math.round(baseX / TILE) + dx;
-      const tileY = Math.round(baseY / TILE) + dy;
+      const baseX = isValidPixel(me.x) ? me.x : myVis.container.x;
+      const baseY = isValidPixel(me.y) ? me.y : myVis.container.y;
+      const tileX = pixelToTile(baseX) + dx;
+      const tileY = pixelToTile(baseY) + dy;
       if (tileX < 0 || tileY < 0 || tileX >= this.mapCols || tileY >= this.mapRows) {
         this.nextMoveAt = this.time.now + 100;
         return;
@@ -452,8 +474,8 @@ export class GameScene extends Phaser.Scene {
         this.nextMoveAt = this.time.now + 100;
         return;
       }
-      const nx = tileX * TILE;
-      const ny = tileY * TILE;
+      const nx = tileToPixel(tileX);
+      const ny = tileToPixel(tileY);
       this.lastMoveSentAt = Date.now();
       this.room.send("move", { direction: dir });
       this.moveTo(myVis, nx, ny);
