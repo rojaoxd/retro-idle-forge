@@ -68,6 +68,7 @@ const DIRS: Record<Direction, { dx: number; dy: number }> = {
 export class GameRoom extends Room<WorldState> {
   maxClients = 200;
   private lastMoveAt = new Map<string, number>();
+  private userIds = new Map<string, string>();
 
   onCreate() {
     this.setState(new WorldState());
@@ -107,9 +108,12 @@ export class GameRoom extends Room<WorldState> {
       p.x = tileToPixel(nx);
       p.y = tileToPixel(ny);
       this.lastMoveAt.set(client.sessionId, now);
+      const userId = this.userIds.get(client.sessionId);
+      if (!userId) return;
 
       PlayerWriter.enqueue({
         id: p.id,
+        user_id: userId,
         character_name: p.name,
         x: nx,
         y: ny,
@@ -148,6 +152,7 @@ export class GameRoom extends Room<WorldState> {
     const p = new Player();
     p.id = character.id;
     p.name = character.name;
+    this.userIds.set(client.sessionId, authData.user.id);
     const spawnTileX = normalizeTile(character.pos_x, SPAWN_X, MAP_COLS);
     const spawnTileY = normalizeTile(character.pos_y, SPAWN_Y, MAP_ROWS);
     const rawPosZ = readFiniteNumber(character.pos_z);
@@ -183,8 +188,10 @@ export class GameRoom extends Room<WorldState> {
     const p = this.state.players.get(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.lastMoveAt.delete(client.sessionId);
+    const userId = this.userIds.get(client.sessionId);
+    this.userIds.delete(client.sessionId);
     if (p) {
-      PlayerWriter.drop(p.id);
+      if (userId) PlayerWriter.drop(userId);
       Logger.push({
         level: "info",
         source: "colyseus",

@@ -5,7 +5,8 @@ import { supabase } from "../supabase.js";
  * a cada PERSIST_INTERVAL_MS. 1000 players = 1 requisição, não 1000.
  */
 export type PlayerSnapshot = {
-  id: string;              // character_id
+  id: string;              // online_players.id; usamos character_id para rastrear o personagem atual
+  user_id: string;
   character_name: string;
   x: number;
   y: number;
@@ -17,10 +18,12 @@ class PlayerWriterImpl {
   private timer: NodeJS.Timeout | null = null;
 
   private isValidSnapshot(snap: PlayerSnapshot) {
-    const uuidOk = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const idOk = uuidRe.test(
       snap.id,
     );
-    return uuidOk && Number.isFinite(snap.x) && Number.isFinite(snap.y);
+    const userIdOk = uuidRe.test(snap.user_id);
+    return idOk && userIdOk && Number.isFinite(snap.x) && Number.isFinite(snap.y);
   }
 
   start(intervalMs: number) {
@@ -38,12 +41,13 @@ class PlayerWriterImpl {
     if (!this.isValidSnapshot(snap)) {
       console.warn("[PlayerWriter] snapshot inválido ignorado", {
         id: snap.id,
+        user_id: snap.user_id,
         x: snap.x,
         y: snap.y,
       });
       return;
     }
-    this.buffer.set(snap.id, snap); // último snapshot vence
+    this.buffer.set(snap.user_id, snap); // último snapshot por usuário vence
   }
 
   drop(id: string) {
@@ -57,7 +61,7 @@ class PlayerWriterImpl {
     if (rows.length === 0) return;
     const { error } = await supabase()
       .from("online_players")
-      .upsert(rows, { onConflict: "id" });
+      .upsert(rows, { onConflict: "user_id" });
     if (error) console.error("[PlayerWriter] upsert falhou:", error.message);
   }
 }
