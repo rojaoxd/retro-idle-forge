@@ -521,5 +521,6 @@ export function MapEditor() {
         </div>
       </div>
     </div>
+    </div>
   );
 }
