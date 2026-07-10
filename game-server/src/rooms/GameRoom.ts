@@ -115,10 +115,14 @@ export class GameRoom extends Room<WorldState> {
     const p = new Player();
     p.id = character.id;
     p.name = character.name;
-    p.x = Number(character.pos_x ?? SPAWN_X) * TILE;
-    p.y = Number(character.pos_y ?? SPAWN_Y) * TILE;
-    p.z = Number(character.pos_z ?? SPAWN_Z);
-    p.hp = Number(character.hp ?? 100);
+    const rawPosX = Number(character.pos_x);
+    const rawPosY = Number(character.pos_y);
+    const rawPosZ = Number(character.pos_z);
+    const rawHp = Number(character.hp);
+    p.x = (Number.isFinite(rawPosX) ? rawPosX : SPAWN_X) * TILE;
+    p.y = (Number.isFinite(rawPosY) ? rawPosY : SPAWN_Y) * TILE;
+    p.z = Number.isFinite(rawPosZ) ? rawPosZ : SPAWN_Z;
+    p.hp = Number.isFinite(rawHp) ? rawHp : 100;
     this.state.players.set(client.sessionId, p);
     void supabase().from("characters").update({ last_login_at: new Date().toISOString() }).eq("id", p.id);
     Logger.push({
