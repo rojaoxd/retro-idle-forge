@@ -3,11 +3,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import {
-  listMyCharacters,
-  deleteCharacter,
-  type,
-} from "@/lib/game/characters.functions";
+import { listMyCharacters, deleteCharacter } from "@/lib/game/characters.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/characters")({
@@ -119,6 +115,3 @@ function vocationLabel(v: string) {
     { none: "Sem vocação", knight: "Knight", paladin: "Paladin", sorcerer: "Sorcerer", druid: "Druid" } as Record<string, string>
   )[v] ?? v;
 }
-
-// silence unused type export
-export const _t: typeof type = undefined as never;
