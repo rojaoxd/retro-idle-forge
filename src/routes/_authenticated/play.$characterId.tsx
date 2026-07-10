@@ -95,7 +95,7 @@ function PlayLoader() {
       });
 
     const serverP = charP
-      .then((c) => joinGameRoom(c.name))
+      .then((c) => joinGameRoom(c.name, c.id))
       .then((room) => {
         roomRef.current = room;
         mark("server", "ok");
@@ -110,7 +110,7 @@ function PlayLoader() {
       setPhase("ready");
     } catch (e) {
       setPhase("error");
-      setError(e instanceof Error ? e.message : "Falha desconhecida");
+      setError(e instanceof Error ? e.message : "Falha ao preparar o jogo");
     }
   }, [characterId, getChar, fetchMap]);
 
@@ -178,9 +178,7 @@ function PlayLoader() {
           ))}
         </ul>
 
-        {phase === "error" && (
-          <p className="text-red-400 text-sm text-center">{error}</p>
-        )}
+        {phase === "error" && <p className="text-red-400 text-sm text-center">{error}</p>}
 
         <div className="flex gap-2">
           <Button
