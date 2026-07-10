@@ -1,4 +1,5 @@
 import { Client, Room } from "colyseus.js";
+import { supabase } from "@/integrations/supabase/client";
 
 export const COLYSEUS_ENDPOINT = import.meta.env.VITE_COLYSEUS_URL || "ws://localhost:2567";
 export const ROOM_NAME = "game";
@@ -21,9 +22,13 @@ export class GameServerConnectionError extends Error {
 }
 
 export async function joinGameRoom(name: string, characterId?: string): Promise<Room> {
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new GameServerConnectionError("Sessão expirada. Entre novamente para jogar.");
+
   try {
     return await withTimeout(
-      getClient().joinOrCreate(ROOM_NAME, { name, characterId }),
+      getClient().joinOrCreate(ROOM_NAME, { name, characterId, accessToken }),
       CONNECT_TIMEOUT_MS,
     );
   } catch (error) {
