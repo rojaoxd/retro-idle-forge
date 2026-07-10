@@ -91,7 +91,7 @@ export class GameRoom extends Room<WorldState> {
           level: "warn",
           source: "colyseus",
           message: "player_position_invalid_reset",
-          meta: { session: client.sessionId, characterId: p.id, x: p.x, y: p.y },
+          meta: { session: client.sessionId, characterId: p.id, x: String(p.x), y: String(p.y) },
         });
         p.x = tileToPixel(SPAWN_X);
         p.y = tileToPixel(SPAWN_Y);
