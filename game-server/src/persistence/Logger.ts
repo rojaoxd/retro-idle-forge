@@ -22,7 +22,9 @@ class LoggerImpl {
   }
 
   push(entry: LogEntry) {
-    this.buffer.push(entry);
+    // meta é NOT NULL no banco (default '{}'); garantimos objeto sempre.
+    const normalized: LogEntry = { ...entry, meta: entry.meta ?? {} };
+    this.buffer.push(normalized);
     // failsafe: se estourar muito, força flush
     if (this.buffer.length >= 200) void this.flush();
   }
