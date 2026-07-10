@@ -40,6 +40,7 @@ function PlayLoader() {
   const [error, setError] = useState<string | null>(null);
   const charRef = useRef<CharacterRow | null>(null);
   const roomRef = useRef<Room | null>(null);
+  const enteringGameRef = useRef(false);
   const [tick, setTick] = useState(0);
 
   const mark = (k: Step, s: StepState) => setSteps((prev) => ({ ...prev, [k]: s }));
@@ -49,6 +50,7 @@ function PlayLoader() {
     setError(null);
     setSteps({ char: "pending", map: "pending", sprites: "pending", server: "pending" });
     charRef.current = null;
+    enteringGameRef.current = false;
     if (roomRef.current) {
       try {
         roomRef.current.leave();
@@ -118,7 +120,7 @@ function PlayLoader() {
     start();
     return () => {
       // se sair sem entrar no jogo, encerra a sala
-      if (phase !== "ready" && roomRef.current) {
+      if (!enteringGameRef.current && roomRef.current) {
         try {
           roomRef.current.leave();
         } catch {
@@ -131,6 +133,7 @@ function PlayLoader() {
 
   const enter = () => {
     if (!charRef.current || !roomRef.current) return;
+    enteringGameRef.current = true;
     setSession({ character: charRef.current, room: roomRef.current });
     navigate({ to: "/game/$characterId", params: { characterId } });
   };

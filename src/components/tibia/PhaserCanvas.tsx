@@ -36,7 +36,7 @@ export function PhaserCanvas() {
         onFps: (fps: number) => setFps(fps),
       });
       const scene = game.scene.getScene("GameScene") as GameSceneType | null;
-      if (scene && room) scene.events.once("create", () => scene.attachRoom(room));
+      scene?.attachRoom(room);
     })();
 
     return () => {
