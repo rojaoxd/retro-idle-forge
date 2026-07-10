@@ -9,7 +9,7 @@ import { SprReader } from "@/lib/dev/tibia/sprReader";
 import { parseDat, type DatParseResult, type ThingType, type DatFlags } from "@/lib/dev/tibia/datReader";
 import { importTibiaBatch } from "@/lib/dev/objects.functions";
 
-export const Route = createFileRoute("/dev/objects/import-client")({ component: Page });
+export const Route = createFileRoute("/dev/objects_/import-client")({ component: Page });
 
 /* Convert a ThingType's spriteIds + SprReader into: dedup tile list + composition cells */
 type Tile = { hash: string; base64Png: string };
