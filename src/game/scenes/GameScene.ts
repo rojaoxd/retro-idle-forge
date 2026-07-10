@@ -351,9 +351,27 @@ export class GameScene extends Phaser.Scene {
     if (this.time.now < this.nextMoveAt) return;
     const state = this.room.state as { players?: PlayersMap };
     const me = state.players?.get(this.room.sessionId);
-    if (!me) return;
     const myVis = this.players.get(this.room.sessionId);
-    if (!myVis) return;
+
+    // Debug: se pressionou tecla mas algo bloqueia, log 1x pra facilitar diagnóstico.
+    const anyKey =
+      this.cursors.left.isDown || this.cursors.right.isDown || this.cursors.up.isDown || this.cursors.down.isDown ||
+      this.wasd.A.isDown || this.wasd.D.isDown || this.wasd.W.isDown || this.wasd.S.isDown;
+    if (anyKey && (!me || !myVis)) {
+      const w = window as unknown as { __moveWarned?: boolean };
+      if (!w.__moveWarned) {
+        w.__moveWarned = true;
+        console.warn("[GameScene] tecla pressionada mas sem me/myVis", {
+          hasMe: !!me,
+          hasMyVis: !!myVis,
+          sessionId: this.room.sessionId,
+          playersInScene: Array.from(this.players.keys()),
+          playersInState: state.players ? Array.from((state.players as unknown as { keys: () => Iterable<string> }).keys?.() ?? []) : [],
+        });
+      }
+      return;
+    }
+    if (!me || !myVis) return;
 
     let dir: Direction | null = null;
     let dx = 0;
