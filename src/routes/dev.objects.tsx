@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Boxes, Plus, Trash2, Save, X, Upload, ChevronLeft, ChevronRight, Play, Pause, FileUp } from "lucide-react";
 import { loadImage, sliceSheet, tilesToComposition, type Tile } from "@/lib/dev/obd/sheetImport";
-import { parseObd } from "@/lib/dev/obd/parser";
+import { parseObd, spriteToTile, type ObdParseResult } from "@/lib/dev/obd/parser";
 
 export const Route = createFileRoute("/dev/objects")({ component: ObjectsPage });
 
