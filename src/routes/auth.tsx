@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -21,12 +22,6 @@ export const Route = createFileRoute("/auth")({
   }),
   component: AuthPage,
 });
-
-const nameSchema = z
-  .string()
-  .min(3, "Mínimo 3 caracteres")
-  .max(20, "Máximo 20 caracteres")
-  .regex(/^[A-Za-z0-9_]+$/, "Apenas letras, números e _");
 
 function AuthPage() {
   const navigate = useNavigate();
