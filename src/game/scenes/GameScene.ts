@@ -259,6 +259,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private moveTo(vis: PlayerVisual, x: number, y: number, instant = false) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return; // ignora NaN
     if (vis.tween) {
       vis.tween.stop();
       vis.tween = null;
