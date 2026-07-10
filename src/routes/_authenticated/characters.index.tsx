@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { listMyCharacters, deleteCharacter } from "@/lib/game/characters.functions";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/characters")({
+export const Route = createFileRoute("/_authenticated/characters/")({
   head: () => ({
     meta: [
       { title: "Personagens — Retro Idle Forge" },
