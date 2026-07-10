@@ -10,9 +10,9 @@
   },
   "dependencies": {
     "@colyseus/schema": "^2.0.36",
-    "@colyseus/ws-transport": "^0.15.13",
+    "@colyseus/ws-transport": "^0.16.0",
     "@supabase/supabase-js": "^2.45.0",
-    "colyseus": "^0.15.20",
+    "colyseus": "^0.16.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2"
   },
