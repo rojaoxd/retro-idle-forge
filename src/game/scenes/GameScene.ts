@@ -202,9 +202,13 @@ export class GameScene extends Phaser.Scene {
       const texKey = this.sheetKeyByUrl.get(sp.sheet_url);
       if (!texKey) continue;
       if (!this.textures.exists(texKey)) continue;
-      const img = this.add.image(t.x * TILE, t.y * TILE, texKey);
+      const tex = this.textures.get(texKey);
+      const frameName = `f_${sp.id}`;
+      if (!tex.has(frameName)) {
+        tex.add(frameName, 0, sp.x, sp.y, sp.width, sp.height);
+      }
+      const img = this.add.image(t.x * TILE, t.y * TILE, texKey, frameName);
       img.setOrigin(0, 0);
-      img.setCrop(sp.x, sp.y, sp.width, sp.height);
       img.setDisplaySize(TILE, TILE);
       img.setDepth(t.layer === "floor" ? 1 : 2);
       if (t.blocking) this.blockingSet.add(`${t.x},${t.y}`);
