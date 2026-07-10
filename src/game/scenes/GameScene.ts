@@ -439,14 +439,21 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (dir) {
-      const tileX = Math.round(me.x / TILE) + dx;
-      const tileY = Math.round(me.y / TILE) + dy;
+      // Se o servidor ainda mandou posição inválida, usa a posição visual atual como referência.
+      const baseX = Number.isFinite(me.x) ? me.x : myVis.container.x;
+      const baseY = Number.isFinite(me.y) ? me.y : myVis.container.y;
+      const tileX = Math.round(baseX / TILE) + dx;
+      const tileY = Math.round(baseY / TILE) + dy;
+      if (tileX < 0 || tileY < 0 || tileX >= this.mapCols || tileY >= this.mapRows) {
+        this.nextMoveAt = this.time.now + 100;
+        return;
+      }
       if (this.blockingSet.has(`${tileX},${tileY}`)) {
         this.nextMoveAt = this.time.now + 100;
         return;
       }
-      const nx = me.x + dx * TILE;
-      const ny = me.y + dy * TILE;
+      const nx = tileX * TILE;
+      const ny = tileY * TILE;
       this.lastMoveSentAt = Date.now();
       this.room.send("move", { direction: dir });
       this.moveTo(myVis, nx, ny);
