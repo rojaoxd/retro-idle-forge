@@ -288,7 +288,27 @@ export function MapEditor() {
       : null;
   const spriteList = (spritesQ.data?.rows ?? []) as SpriteRow[];
 
+  const saving = paint.isPending || delBulk.isPending;
+
   return (
+    <div className="space-y-3">
+      {/* TOOLBAR SALVAR */}
+      <div className="dev-panel flex items-center gap-3 p-2">
+        <Button size="sm" onClick={saveDraft} disabled={!dirty || saving}
+          className="gap-2">
+          <Save className="h-4 w-4" />
+          {saving ? "Salvando..." : "Salvar mapa"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={discardDraft} disabled={!dirty || saving} className="gap-2">
+          <Undo2 className="h-4 w-4" /> Descartar
+        </Button>
+        <div className={`text-xs ${dirty ? "text-amber-400" : "text-slate-500"}`}>
+          {dirty
+            ? `${draft.size} alteração(ões) pendente(s) — nada foi enviado ao banco ainda`
+            : "Sem alterações pendentes"}
+        </div>
+      </div>
+
     <div className="grid grid-cols-[320px_1fr] gap-4">
       <div className="dev-panel space-y-3 p-3">
         {/* FLOOR */}
