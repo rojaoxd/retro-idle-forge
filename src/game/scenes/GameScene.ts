@@ -63,6 +63,8 @@ export class GameScene extends Phaser.Scene {
   private mapRows = 30;
   private mapReady = false;
   private pendingRoom: Room | null = null;
+  private sheetKeyByUrl = new Map<string, string>();
+  private fallbackPlayer: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super("GameScene");
@@ -84,8 +86,9 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setZoom(2);
     this.cameras.main.roundPixels = true;
 
-    // Placeholder enquanto carrega
+    // Chão visível imediatamente, para nunca ficar uma tela preta enquanto assets/rede carregam.
     this.drawFallback();
+    this.showFallbackPlayer();
 
     void this.loadWorldFromDB()
       .catch((e) => console.warn("[GameScene] falha carregando mapa:", e))
@@ -112,10 +115,51 @@ export class GameScene extends Phaser.Scene {
 
   private drawFallback() {
     const g = this.add.graphics();
-    g.fillStyle(0x0a0a0a, 1);
-    g.fillRect(0, 0, this.mapCols * TILE, this.mapRows * TILE);
+    g.setDepth(0);
+
+    for (let y = 0; y < this.mapRows; y += 1) {
+      for (let x = 0; x < this.mapCols; x += 1) {
+        const color = (x + y) % 3 === 0 ? 0x7c8f45 : (x * 7 + y * 11) % 5 === 0 ? 0x5f7f3b : 0x6f8a3f;
+        g.fillStyle(color, 1);
+        g.fillRect(x * TILE, y * TILE, TILE, TILE);
+      }
+    }
+
+    g.lineStyle(1, 0x26331f, 0.2);
+    for (let x = 0; x <= this.mapCols; x += 1) {
+      g.lineBetween(x * TILE, 0, x * TILE, this.mapRows * TILE);
+    }
+    for (let y = 0; y <= this.mapRows; y += 1) {
+      g.lineBetween(0, y * TILE, this.mapCols * TILE, y * TILE);
+    }
+
     this.cameras.main.setBounds(0, 0, this.mapCols * TILE, this.mapRows * TILE);
     this.cameras.main.centerOn((this.mapCols * TILE) / 2, (this.mapRows * TILE) / 2);
+  }
+
+  private showFallbackPlayer() {
+    const x = SPAWN_X * TILE + TILE / 2;
+    const y = SPAWN_Y * TILE + TILE / 2;
+    const container = this.add.container(x, y);
+    container.setDepth(10);
+
+    const shadow = this.add.ellipse(0, 11, 20, 7, 0x000000, 0.35);
+    const body = this.add.rectangle(0, 0, TILE - 10, TILE - 8, 0x4fa4ff);
+    body.setStrokeStyle(1, 0x061018);
+    const head = this.add.rectangle(0, -8, 14, 10, 0xf1c28a);
+    head.setStrokeStyle(1, 0x061018);
+    const label = this.add.text(0, -TILE / 2 - 9, "You", {
+      fontFamily: "Verdana, Tahoma, sans-serif",
+      fontSize: "10px",
+      color: "#7fd4ff",
+      stroke: "#000",
+      strokeThickness: 2,
+    });
+    label.setOrigin(0.5, 0.5);
+
+    container.add([shadow, body, head, label]);
+    this.fallbackPlayer = container;
+    this.cameras.main.startFollow(container, true, 0.15, 0.15);
   }
 
   private async loadWorldFromDB() {
@@ -126,9 +170,12 @@ export class GameScene extends Phaser.Scene {
     };
 
     const uniqueSheets = Array.from(new Set(sprites.map((s) => s.sheet_url)));
-    await Promise.all(
-      uniqueSheets.map((path) => this.loadTexture(`sheet:${path}`, urlMap[path] ?? "")),
-    );
+    const textureEntries = uniqueSheets.map((path, index) => {
+      const key = `sheet_${index}`;
+      this.sheetKeyByUrl.set(path, key);
+      return { key, url: urlMap[path] ?? "" };
+    });
+    await this.loadTextures(textureEntries);
 
     const spriteById = new Map<number, Sprite>();
     for (const s of sprites) spriteById.set(s.id, s);
@@ -152,26 +199,36 @@ export class GameScene extends Phaser.Scene {
     for (const t of ordered) {
       const sp = spriteById.get(t.tile_id);
       if (!sp) continue;
-      const texKey = `sheet:${sp.sheet_url}`;
+      const texKey = this.sheetKeyByUrl.get(sp.sheet_url);
+      if (!texKey) continue;
       if (!this.textures.exists(texKey)) continue;
       const img = this.add.image(t.x * TILE, t.y * TILE, texKey);
       img.setOrigin(0, 0);
       img.setCrop(sp.x, sp.y, sp.width, sp.height);
-      img.setPosition(t.x * TILE - sp.x, t.y * TILE - sp.y);
+      img.setDisplaySize(TILE, TILE);
       img.setDepth(t.layer === "floor" ? 1 : 2);
       if (t.blocking) this.blockingSet.add(`${t.x},${t.y}`);
     }
   }
 
-  private loadTexture(key: string, url: string): Promise<void> {
+  private loadTextures(entries: Array<{ key: string; url: string }>): Promise<void> {
     return new Promise((resolve) => {
-      if (!url || this.textures.exists(key)) {
+      const queued = entries.filter(({ key, url }) => url && !this.textures.exists(key));
+      if (!queued.length) {
         resolve();
         return;
       }
-      this.load.image(key, url);
-      this.load.once(`filecomplete-image-${key}`, () => resolve());
-      this.load.once("loaderror", () => resolve());
+
+      for (const { key, url } of queued) this.load.image(key, url);
+
+      const done = () => {
+        this.load.off(Phaser.Loader.Events.COMPLETE, done);
+        this.load.off(Phaser.Loader.Events.LOAD_ERROR, done);
+        resolve();
+      };
+
+      this.load.once(Phaser.Loader.Events.COMPLETE, done);
+      this.load.once(Phaser.Loader.Events.LOAD_ERROR, done);
       this.load.start();
     });
   }
@@ -226,6 +283,8 @@ export class GameScene extends Phaser.Scene {
       this.players.set(sessionId, vis);
 
       if (isMe) {
+        this.fallbackPlayer?.destroy();
+        this.fallbackPlayer = null;
         this.cameras.main.startFollow(container, true, 0.15, 0.15);
       }
 
