@@ -151,7 +151,7 @@ export class GameScene extends Phaser.Scene {
     body.setStrokeStyle(1, 0x061018);
     const head = this.add.rectangle(0, -8, 14, 10, 0xf1c28a);
     head.setStrokeStyle(1, 0x061018);
-    const label = this.add.text(0, -TILE / 2 - 9, "You", {
+    const label = this.add.text(0, -TILE / 2 - 9, this.characterName, {
       fontFamily: "Verdana, Tahoma, sans-serif",
       fontSize: "10px",
       color: "#7fd4ff",
