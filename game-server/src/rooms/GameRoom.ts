@@ -112,7 +112,6 @@ export class GameRoom extends Room<WorldState> {
       if (!userId) return;
 
       PlayerWriter.enqueue({
-        id: p.id,
         user_id: userId,
         character_name: p.name,
         x: nx,
