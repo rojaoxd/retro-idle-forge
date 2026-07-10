@@ -69,6 +69,16 @@ export function MapEditor() {
   const [showBelow, setShowBelow] = useState(true);
   const draggingRef = useRef<0 | 1 | 2 | null>(null);
 
+  // ===== Draft buffer (nada vai ao banco até clicar Salvar) =====
+  // key = `${z}:${layer}:${x}:${y}`; valor = TileRow para upsert, null = deletar.
+  type DraftVal =
+    | { op: "put"; x: number; y: number; z: number; layer: Layer; tile_id: number; blocking: boolean; spawn_monster_id?: string | null }
+    | { op: "del"; x: number; y: number; z: number; layer: Layer };
+  const [draft, setDraft] = useState<Map<string, DraftVal>>(new Map());
+  const dirty = draft.size > 0;
+
+  const cellKey = (x: number, y: number, zz: number, lyr: Layer) => `${zz}:${lyr}:${x}:${y}`;
+
   const tilesQ = useQuery({
     queryKey: ["map-tiles", z],
     queryFn: () => listFn({ data: { z } }),
@@ -82,21 +92,11 @@ export function MapEditor() {
     queryFn: () => palettesFn(),
   });
 
-  const upsert = useMutation({
-    mutationFn: (v: any) => upsertFn({ data: v }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["map-tiles", z] }),
-  });
   const paint = useMutation({
     mutationFn: (tiles: any[]) => paintFn({ data: { tiles } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["map-tiles", z] }),
-  });
-  const del = useMutation({
-    mutationFn: (v: any) => deleteFn({ data: v }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["map-tiles", z] }),
   });
   const delBulk = useMutation({
     mutationFn: (cells: any[]) => deleteBulkFn({ data: { cells } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["map-tiles", z] }),
   });
 
   const byCell = useMemo(() => {
@@ -117,6 +117,29 @@ export function MapEditor() {
   const urlMap = { ...(tilesQ.data?.urlMap ?? {}), ...(spritesQ.data?.urlMap ?? {}) };
   const monsters = (tilesQ.data?.monsters ?? []) as { id: string; name: string }[];
 
+  // Resolve o estado efetivo (server + draft) para uma célula
+  function effectiveAt(x: number, y: number, zz: number, lyr: Layer): TileRow | null {
+    const k = cellKey(x, y, zz, lyr);
+    const d = draft.get(k);
+    if (d) {
+      if (d.op === "del") return null;
+      return {
+        id: `draft:${k}`, x: d.x, y: d.y, z: d.z, layer: d.layer,
+        tile_id: d.tile_id, blocking: d.blocking,
+        spawn_monster_id: d.spawn_monster_id ?? null,
+      };
+    }
+    return byCell.get(k) ?? null;
+  }
+
+  // ===== Warn ao sair com alterações pendentes =====
+  useEffect(() => {
+    if (!dirty) return;
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [dirty]);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target && (e.target as HTMLElement).tagName.match(/INPUT|TEXTAREA|SELECT/)) return;
@@ -134,63 +157,75 @@ export function MapEditor() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  function stagePut(x: number, y: number, extra?: { spawn_monster_id?: string | null }) {
+    if (!selectedSprite) return;
+    if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return;
+    const val: DraftVal = {
+      op: "put", x, y, z, layer,
+      tile_id: selectedSprite.id,
+      blocking: layer === "spawn" ? false : blocking,
+      spawn_monster_id: extra?.spawn_monster_id ?? (layer === "spawn" ? selectedMonsterId : null),
+    };
+    setDraft((prev) => {
+      const next = new Map(prev);
+      next.set(cellKey(x, y, z, layer), val);
+      return next;
+    });
+  }
+
+  function stageDel(x: number, y: number) {
+    if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return;
+    setDraft((prev) => {
+      const next = new Map(prev);
+      const k = cellKey(x, y, z, layer);
+      // Se a célula não existia no server e havia só um put no draft, remove a entrada
+      const existsOnServer = byCell.has(k);
+      const prevDraft = prev.get(k);
+      if (!existsOnServer && prevDraft?.op === "put") {
+        next.delete(k);
+      } else {
+        next.set(k, { op: "del", x, y, z, layer });
+      }
+      return next;
+    });
+  }
+
   function paintCell(cx: number, cy: number) {
-    const cells: any[] = [];
+    if (layer === "spawn" && !selectedMonsterId) return;
     const r = Math.floor(brush / 2);
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
-        const x = cx + dx, y = cy + dy;
-        if (x < 0 || y < 0 || x >= COLS || y >= ROWS) continue;
-        const p: any = {
-          x, y, z, layer,
-          tile_id: selectedSprite!.id,
-          blocking,
-        };
-        if (layer === "spawn") {
-          if (!selectedMonsterId) return;
-          p.spawn_monster_id = selectedMonsterId;
-          p.blocking = false;
-        }
-        cells.push(p);
+        stagePut(cx + dx, cy + dy);
       }
     }
-    if (cells.length === 1) upsert.mutate(cells[0]);
-    else if (cells.length) paint.mutate(cells);
   }
 
   function eraseCell(cx: number, cy: number) {
-    if (brush === 1) return del.mutate({ x: cx, y: cy, z, layer });
-    const cells: any[] = [];
     const r = Math.floor(brush / 2);
     for (let dy = -r; dy <= r; dy++)
-      for (let dx = -r; dx <= r; dx++) {
-        const x = cx + dx, y = cy + dy;
-        if (x < 0 || y < 0 || x >= COLS || y >= ROWS) continue;
-        cells.push({ x, y, z, layer });
-      }
-    delBulk.mutate(cells);
+      for (let dx = -r; dx <= r; dx++) stageDel(cx + dx, cy + dy);
   }
 
   function fillFrom(sx: number, sy: number) {
     if (!selectedSprite) return;
-    const start = byCell.get(`${z}:${layer}:${sx}:${sy}`);
-    const startId = start?.tile_id ?? null;
+    const startTile = effectiveAt(sx, sy, z, layer);
+    const startId = startTile?.tile_id ?? null;
     const visited = new Set<string>();
     const stack: [number, number][] = [[sx, sy]];
-    const cells: any[] = [];
-    while (stack.length && cells.length < 1000) {
+    let count = 0;
+    while (stack.length && count < 1000) {
       const [x, y] = stack.pop()!;
       const key = `${x},${y}`;
       if (visited.has(key)) continue;
       visited.add(key);
       if (x < 0 || y < 0 || x >= COLS || y >= ROWS) continue;
-      const here = byCell.get(`${z}:${layer}:${x}:${y}`);
+      const here = effectiveAt(x, y, z, layer);
       const hereId = here?.tile_id ?? null;
       if (hereId !== startId) continue;
-      cells.push({ x, y, z, layer, tile_id: selectedSprite.id, blocking });
+      stagePut(x, y);
+      count++;
       stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
     }
-    if (cells.length) paint.mutate(cells);
   }
 
   function pickAt(x: number, y: number) {
