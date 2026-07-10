@@ -48,9 +48,7 @@ const FLOOR_LABEL = (z: number) => {
 export function MapEditor() {
   const qc = useQueryClient();
   const listFn = useServerFn(listMapTiles);
-  const upsertFn = useServerFn(upsertMapTile);
   const paintFn = useServerFn(paintMapTiles);
-  const deleteFn = useServerFn(deleteMapTile);
   const deleteBulkFn = useServerFn(deleteMapTilesBulk);
   const spritesFn = useServerFn(listSprites);
   const palettesFn = useServerFn(listPalettes);
