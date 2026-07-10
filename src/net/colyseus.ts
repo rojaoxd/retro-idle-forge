@@ -33,7 +33,16 @@ export async function joinGameRoom(name: string, characterId?: string): Promise<
     );
   } catch (error) {
     if (error instanceof GameServerConnectionError) throw error;
-    throw new GameServerConnectionError();
+    console.error("[colyseus] joinOrCreate falhou", { endpoint: COLYSEUS_ENDPOINT, error });
+    const raw = error instanceof Error ? error.message : String(error);
+    // Erros vindos do onJoin do servidor (ex.: "Personagem não encontrado", "Sessão inválida")
+    // chegam como Error com message não-vazia. Mantemos a mensagem original nesse caso.
+    if (raw && !/network|websocket|failed to connect|timeout|econn|refused|closed before/i.test(raw)) {
+      throw new GameServerConnectionError(raw);
+    }
+    throw new GameServerConnectionError(
+      `Não foi possível conectar em ${COLYSEUS_ENDPOINT}. Verifique DNS, TLS (WSS) e se o Colyseus está online.`,
+    );
   }
 }
 
