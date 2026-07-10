@@ -1,20 +1,33 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { listObjects, upsertObject, deleteObject, setObjectComposition } from "@/lib/dev/objects.functions";
+import {
+  listObjects, upsertObject, deleteObject, setObjectComposition,
+  nextClientId, importSpriteSheet, importObjectFull,
+} from "@/lib/dev/objects.functions";
 import { listSprites } from "@/lib/dev/sprites.functions";
 import { SpriteThumb } from "@/components/dev/SpriteThumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Boxes, Plus, Trash2, Save, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Boxes, Plus, Trash2, Save, X, Upload, ChevronLeft, ChevronRight, Play, Pause, FileUp } from "lucide-react";
+import { loadImage, sliceSheet, tilesToComposition, type Tile } from "@/lib/dev/obd/sheetImport";
+import { parseObd } from "@/lib/dev/obd/parser";
 
 export const Route = createFileRoute("/dev/objects")({ component: ObjectsPage });
 
-const KINDS = ["item", "ground", "container", "weapon", "armor", "fluid", "splash", "deco", "creature", "wall", "effect"] as const;
-const GROUPS = ["nature", "town", "dungeon", "walls", "creatures", "items", "effects", "misc"] as const;
+/* ============== Categories (matches Object Builder tabs) ============== */
+
+type Category = "items" | "outfits" | "effects" | "missiles";
+const CATEGORIES: { id: Category; label: string; kinds: string[]; defaultKind: string }[] = [
+  { id: "items",    label: "Items",    kinds: ["item","ground","container","weapon","armor","fluid","splash","deco","wall"], defaultKind: "item" },
+  { id: "outfits",  label: "Outfits",  kinds: ["creature"], defaultKind: "creature" },
+  { id: "effects",  label: "Effects",  kinds: ["effect"],   defaultKind: "effect" },
+  { id: "missiles", label: "Missiles", kinds: ["effect"],   defaultKind: "effect" },
+];
 
 const FLAG_DEFS: { key: string; label: string; group: string }[] = [
   { key: "isSolid", label: "isSolid (bloqueia)", group: "Collision" },
@@ -34,11 +47,12 @@ const FLAG_DEFS: { key: string; label: string; group: string }[] = [
   { key: "hasLight", label: "hasLight", group: "Light" },
   { key: "isLyingCorpse", label: "isLyingCorpse", group: "Misc" },
   { key: "isAnimateAlways", label: "isAnimateAlways", group: "Misc" },
+  { key: "isMissile", label: "isMissile (projétil)", group: "Misc" },
 ];
 
 type ObjectRow = {
   id?: string; client_id?: number | null; name: string;
-  object_kind: (typeof KINDS)[number];
+  object_kind: string;
   width: number; height: number; layers: number;
   pattern_x: number; pattern_y: number; pattern_z: number;
   frames: number; frame_duration_ms: number;
@@ -46,14 +60,16 @@ type ObjectRow = {
   palette_group?: string | null;
 };
 
-const emptyObj: ObjectRow = {
-  name: "", object_kind: "item",
+const emptyObj = (kind: string, isOutfit = false, isMissile = false): ObjectRow => ({
+  name: "", object_kind: kind,
   width: 1, height: 1, layers: 1,
-  pattern_x: 1, pattern_y: 1, pattern_z: 1,
+  pattern_x: isOutfit ? 4 : 1, pattern_y: 1, pattern_z: 1,
   frames: 1, frame_duration_ms: 250,
-  flags: {},
+  flags: isMissile ? { isMissile: true } : {},
   palette_group: null,
-};
+});
+
+/* ============================ Page ============================ */
 
 function ObjectsPage() {
   const qc = useQueryClient();
@@ -61,48 +77,97 @@ function ObjectsPage() {
   const upFn = useServerFn(upsertObject);
   const delFn = useServerFn(deleteObject);
   const compFn = useServerFn(setObjectComposition);
+  const nextIdFn = useServerFn(nextClientId);
 
-  const [sel, setSel] = useState<ObjectRow>(emptyObj);
+  const [tab, setTab] = useState<Category>("items");
+  const [sel, setSel] = useState<ObjectRow>(emptyObj("item"));
   const [q, setQ] = useState("");
+  const [importOpen, setImportOpen] = useState<"png" | "obd" | null>(null);
 
   const objs = useQuery({ queryKey: ["objects"], queryFn: () => listFn() });
+
+  const filtered = useMemo(() => {
+    const cat = CATEGORIES.find((c) => c.id === tab)!;
+    const all = objs.data?.objects ?? [];
+    return all
+      .filter((o: any) => cat.kinds.includes(o.object_kind))
+      .filter((o: any) => {
+        if (tab === "missiles") return Boolean(o.flags?.isMissile);
+        if (tab === "effects" && cat.kinds.includes("effect")) return !o.flags?.isMissile;
+        return true;
+      })
+      .filter((o: any) => o.name.toLowerCase().includes(q.toLowerCase()))
+      .sort((a: any, b: any) => (a.client_id ?? 0) - (b.client_id ?? 0));
+  }, [objs.data, tab, q]);
+
+  async function newObject() {
+    const cat = CATEGORIES.find((c) => c.id === tab)!;
+    const isOutfit = tab === "outfits";
+    const isMissile = tab === "missiles";
+    const kind = cat.defaultKind;
+    let cid: number | null = null;
+    try {
+      const r = await nextIdFn({ data: { object_kind: kind as any } });
+      cid = r.next;
+    } catch { /* ignore */ }
+    setSel({ ...emptyObj(kind, isOutfit, isMissile), client_id: cid });
+  }
+
   const save = useMutation({
     mutationFn: (v: ObjectRow) => upFn({ data: v }),
     onSuccess: (r) => { qc.invalidateQueries({ queryKey: ["objects"] }); setSel(r.row as any); },
   });
   const del = useMutation({
     mutationFn: (id: string) => delFn({ data: { id } }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["objects"] }); setSel(emptyObj); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["objects"] }); setSel(emptyObj("item")); },
   });
   const saveComp = useMutation({
     mutationFn: (v: { object_id: string; cells: any[] }) => compFn({ data: v }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["objects"] }),
   });
 
-  const filtered = (objs.data?.objects ?? []).filter((o: any) =>
-    o.name.toLowerCase().includes(q.toLowerCase()));
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Boxes className="h-6 w-6 text-emerald-400" />
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-slate-100">Object Builder</h1>
-          <p className="text-xs text-slate-400">Monte objetos multi-célula, frames de animação e flags do .dat</p>
+          <p className="text-xs text-slate-400">Réplica do OB oficial · Items, Outfits, Effects, Missiles</p>
         </div>
+        <Button size="sm" variant="secondary" onClick={() => setImportOpen("png")}>
+          <Upload className="mr-1 h-4 w-4" /> Import PNG (magenta)
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => setImportOpen("obd")}>
+          <FileUp className="mr-1 h-4 w-4" /> Import .obd
+        </Button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[260px_1fr_260px]">
+      {/* Category tabs */}
+      <div className="flex gap-1 border-b border-slate-800">
+        {CATEGORIES.map((c) => (
+          <button key={c.id} onClick={() => { setTab(c.id); setSel(emptyObj(c.defaultKind, c.id==="outfits", c.id==="missiles")); }}
+            className="px-4 py-2 text-sm border-b-2 transition-colors"
+            style={{
+              color: tab === c.id ? "var(--dev-accent)" : "var(--dev-text)",
+              borderColor: tab === c.id ? "var(--dev-accent)" : "transparent",
+              background: tab === c.id ? "var(--dev-surface-2)" : "transparent",
+            }}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-[240px_1fr_260px]">
         {/* LIST */}
         <div className="dev-panel p-3">
           <div className="mb-2 flex gap-2">
             <Input placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} />
-            <Button size="sm" onClick={() => setSel(emptyObj)}
+            <Button size="sm" onClick={newObject}
               style={{ background: "var(--dev-accent)", color: "#052e2b" }}>
               <Plus className="h-4 w-4" />
             </Button>
           </div>
-          <div className="max-h-[70vh] overflow-y-auto space-y-1">
+          <div className="max-h-[74vh] overflow-y-auto space-y-1">
             {filtered.map((o: any) => (
               <button key={o.id} type="button" onClick={() => setSel(o)}
                 className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-slate-800"
@@ -110,39 +175,52 @@ function ObjectsPage() {
                   color: sel.id === o.id ? "var(--dev-accent)" : "var(--dev-text)",
                   background: sel.id === o.id ? "var(--dev-surface-2)" : "transparent",
                 }}>
-                <span className="flex-1 truncate">{o.name}</span>
+                <span className="w-10 text-[10px] text-slate-500 font-mono">
+                  {o.client_id ?? "—"}
+                </span>
+                <span className="flex-1 truncate">{o.name || <em className="text-slate-600">sem nome</em>}</span>
                 <span className="text-[9px] text-slate-500">{o.width}×{o.height}</span>
               </button>
             ))}
-            {filtered.length === 0 && <div className="p-4 text-center text-xs text-slate-500">Nenhum objeto</div>}
+            {filtered.length === 0 && <div className="p-4 text-center text-xs text-slate-500">Nenhum objeto nesta categoria</div>}
           </div>
         </div>
 
         {/* COMPOSER */}
         <ObjectComposer
-          key={sel.id ?? "new"}
-          initial={sel}
+          key={sel.id ?? `new-${tab}`}
+          initial={sel} tab={tab}
           allCompositions={(objs.data?.compositions ?? [])}
           sprites={(objs.data?.sprites ?? [])}
           urlMap={objs.data?.urlMap ?? {}}
           onSave={(v) => save.mutate(v)}
           onSaveComposition={(cells) => sel.id && saveComp.mutate({ object_id: sel.id, cells })}
-          onDelete={sel.id ? () => confirm("Excluir?") && del.mutate(sel.id!) : undefined}
+          onDelete={sel.id ? () => confirm("Excluir este objeto?") && del.mutate(sel.id!) : undefined}
           saving={save.isPending || saveComp.isPending}
         />
 
         {/* FLAGS */}
         <FlagsPanel value={sel} onChange={(v) => setSel(v)} />
       </div>
+
+      {importOpen === "png" && (
+        <ImportPngDialog onClose={() => setImportOpen(null)} category={tab}
+          onImported={() => qc.invalidateQueries({ queryKey: ["objects"] })} />
+      )}
+      {importOpen === "obd" && (
+        <ImportObdDialog onClose={() => setImportOpen(null)} />
+      )}
     </div>
   );
 }
 
+/* ========================== Composer ========================== */
+
 function ObjectComposer({
-  initial, allCompositions, sprites, urlMap,
+  initial, tab, allCompositions, sprites, urlMap,
   onSave, onSaveComposition, onDelete, saving,
 }: {
-  initial: ObjectRow;
+  initial: ObjectRow; tab: Category;
   allCompositions: any[]; sprites: any[]; urlMap: Record<string, string | null>;
   onSave: (v: ObjectRow) => void;
   onSaveComposition: (cells: any[]) => void;
@@ -150,7 +228,18 @@ function ObjectComposer({
 }) {
   const [v, setV] = useState<ObjectRow>(initial);
   const [frame, setFrame] = useState(0);
-  useEffect(() => { setV(initial); setFrame(0); }, [initial]);
+  const [dir, setDir] = useState(0); // pattern_x index (N/E/S/W for outfits)
+  const [playing, setPlaying] = useState(false);
+  const [propTab, setPropTab] = useState<"texture" | "properties">("texture");
+
+  useEffect(() => { setV(initial); setFrame(0); setDir(0); }, [initial]);
+
+  // Auto-play frames
+  useEffect(() => {
+    if (!playing || v.frames <= 1) return;
+    const t = setInterval(() => setFrame((f) => (f + 1) % v.frames), v.frame_duration_ms);
+    return () => clearInterval(t);
+  }, [playing, v.frames, v.frame_duration_ms]);
 
   const spriteFn = useServerFn(listSprites);
   const [search, setSearch] = useState("");
@@ -159,12 +248,11 @@ function ObjectComposer({
     queryFn: () => spriteFn({ data: { search: search || undefined, limit: 200, offset: 0 } }),
   });
 
-  // cells state = per (frame, cell_x, cell_y) → sprite_id
   const initialCells = useMemo(() => {
     const m = new Map<string, number>();
     if (initial.id) {
       for (const c of allCompositions.filter((c) => c.object_id === initial.id)) {
-        m.set(`${c.frame}:${c.cell_x}:${c.cell_y}`, c.sprite_id);
+        m.set(`${c.frame}:${c.pattern_x}:${c.cell_x}:${c.cell_y}`, c.sprite_id);
       }
     }
     return m;
@@ -178,13 +266,12 @@ function ObjectComposer({
     for (const s of (spritesQ.data?.rows ?? [])) m.set(s.id, s);
     return m;
   }, [sprites, spritesQ.data]);
-
   const allUrls = { ...urlMap, ...(spritesQ.data?.urlMap ?? {}) };
 
   function setCell(cx: number, cy: number, spriteId: number | null) {
     setCellMap((prev) => {
       const m = new Map(prev);
-      const key = `${frame}:${cx}:${cy}`;
+      const key = `${frame}:${dir}:${cx}:${cy}`;
       if (spriteId == null) m.delete(key); else m.set(key, spriteId);
       return m;
     });
@@ -195,119 +282,148 @@ function ObjectComposer({
     if (initial.id) {
       const cells: any[] = [];
       for (const [k, sid] of cellMap.entries()) {
-        const [fr, cx, cy] = k.split(":").map(Number);
-        cells.push({ sprite_id: sid, frame: fr, cell_x: cx, cell_y: cy });
+        const [fr, px, cx, cy] = k.split(":").map(Number);
+        cells.push({ sprite_id: sid, frame: fr, pattern_x: px, cell_x: cx, cell_y: cy });
       }
       onSaveComposition(cells);
     }
   }
 
+  const dirLabel = tab === "outfits" ? ["N","E","S","W"][dir] ?? String(dir) : String(dir);
+
   return (
-    <div className="dev-panel space-y-4 p-4">
-      <div className="grid gap-3 md:grid-cols-2">
+    <div className="dev-panel space-y-3 p-4">
+      {/* header */}
+      <div className="grid gap-3 md:grid-cols-[80px_1fr_140px]">
+        <div>
+          <label className="block text-[10px] uppercase text-slate-400">ID</label>
+          <Input value={v.client_id ?? ""} onChange={(e) => setV({ ...v, client_id: e.target.value ? Number(e.target.value) : null })} />
+        </div>
         <div>
           <label className="block text-[10px] uppercase text-slate-400">Nome</label>
           <Input value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="ex.: Oak Tree 2x2" />
         </div>
         <div>
           <label className="block text-[10px] uppercase text-slate-400">Kind</label>
-          <Select value={v.object_kind} onValueChange={(x) => setV({ ...v, object_kind: x as any })}>
+          <Select value={v.object_kind} onValueChange={(x) => setV({ ...v, object_kind: x })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              {KINDS.map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid grid-cols-4 gap-2">
-          <div><label className="block text-[10px] text-slate-400">W</label>
-            <Input type="number" min={1} max={4} value={v.width} onChange={(e) => setV({ ...v, width: Number(e.target.value) })} /></div>
-          <div><label className="block text-[10px] text-slate-400">H</label>
-            <Input type="number" min={1} max={4} value={v.height} onChange={(e) => setV({ ...v, height: Number(e.target.value) })} /></div>
-          <div><label className="block text-[10px] text-slate-400">Frames</label>
-            <Input type="number" min={1} value={v.frames} onChange={(e) => setV({ ...v, frames: Number(e.target.value) })} /></div>
-          <div><label className="block text-[10px] text-slate-400">ms/frame</label>
-            <Input type="number" value={v.frame_duration_ms} onChange={(e) => setV({ ...v, frame_duration_ms: Number(e.target.value) })} /></div>
-        </div>
-        <div>
-          <label className="block text-[10px] uppercase text-slate-400">Palette group</label>
-          <Select value={v.palette_group ?? "none"} onValueChange={(x) => setV({ ...v, palette_group: x === "none" ? null : x })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">— nenhum —</SelectItem>
-              {GROUPS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+              {CATEGORIES.find((c) => c.id === tab)!.kinds.map((k) => (
+                <SelectItem key={k} value={k}>{k}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      {/* GRID */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <div className="text-xs uppercase tracking-wider text-emerald-400">Composição (frame {frame + 1} / {v.frames})</div>
-          <div className="flex gap-1">
-            {Array.from({ length: v.frames }).map((_, i) => (
-              <button key={i} onClick={() => setFrame(i)} className="h-6 w-6 rounded text-xs"
-                style={{ background: i === frame ? "var(--dev-accent)" : "var(--dev-surface-2)", color: i === frame ? "#052e2b" : "var(--dev-text)" }}>
-                {i + 1}
-              </button>
-            ))}
+      {/* aba textura/propriedades */}
+      <div className="flex gap-1 border-b border-slate-800">
+        {(["texture","properties"] as const).map((t) => (
+          <button key={t} onClick={() => setPropTab(t)}
+            className="px-3 py-1 text-xs uppercase tracking-wider"
+            style={{
+              color: propTab === t ? "var(--dev-accent)" : "var(--dev-text)",
+              borderBottom: propTab === t ? "2px solid var(--dev-accent)" : "2px solid transparent",
+            }}>
+            {t === "texture" ? "Textura" : "Propriedades"}
+          </button>
+        ))}
+      </div>
+
+      {propTab === "texture" ? (
+        <>
+          {/* dimensions */}
+          <div className="grid grid-cols-7 gap-2">
+            <NumField label="W" v={v.width} onChange={(x)=>setV({...v,width:x})} min={1} max={4} />
+            <NumField label="H" v={v.height} onChange={(x)=>setV({...v,height:x})} min={1} max={4} />
+            <NumField label="Layers" v={v.layers} onChange={(x)=>setV({...v,layers:x})} min={1} max={4} />
+            <NumField label="Pat.X" v={v.pattern_x} onChange={(x)=>setV({...v,pattern_x:x})} min={1} max={8} />
+            <NumField label="Pat.Y" v={v.pattern_y} onChange={(x)=>setV({...v,pattern_y:x})} min={1} max={4} />
+            <NumField label="Frames" v={v.frames} onChange={(x)=>setV({...v,frames:x})} min={1} max={16} />
+            <NumField label="ms/f" v={v.frame_duration_ms} onChange={(x)=>setV({...v,frame_duration_ms:x})} min={50} max={2000} />
           </div>
-        </div>
-        <div className="dev-inset p-2 inline-block"
-          style={{ display: "grid", gridTemplateColumns: `repeat(${v.width}, 64px)`, gap: 4 }}>
-          {Array.from({ length: v.height }).map((_, cy) =>
-            Array.from({ length: v.width }).map((_, cx) => {
-              const key = `${frame}:${cx}:${cy}`;
-              const sid = cellMap.get(key);
-              const sp = sid ? spriteById.get(sid) : null;
-              return (
-                <div key={key}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const id = Number(e.dataTransfer.getData("text/plain"));
-                    if (id) setCell(cx, cy, id);
-                  }}
-                  className="relative grid place-items-center rounded border"
-                  style={{ width: 64, height: 64, borderColor: sp ? "var(--dev-accent)" : "rgb(51,65,85)", background: "#0a0a0a" }}>
-                  {sp && allUrls[sp.sheet_url] ? (
-                    <>
-                      <SpriteThumb sheetUrl={allUrls[sp.sheet_url] ?? null}
-                        x={sp.x} y={sp.y} width={sp.width} height={sp.height} scale={2} />
-                      <button onClick={() => setCell(cx, cy, null)}
-                        className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-red-500 text-white">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </>
-                  ) : (
-                    <span className="text-[9px] text-slate-600">drop</span>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
 
-      {/* SPRITE POOL */}
-      <div>
-        <div className="mb-1 text-xs uppercase tracking-wider text-emerald-400">Sprite Pool (arraste para o grid)</div>
-        <Input placeholder="Buscar sprite…" value={search} onChange={(e) => setSearch(e.target.value)} className="mb-2" />
-        <div className="dev-inset max-h-[220px] overflow-y-auto p-2">
-          <div className="grid grid-cols-8 gap-1">
-            {(spritesQ.data?.rows ?? []).map((r: any) => (
-              <div key={r.id}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData("text/plain", String(r.id))}
-                title={`#${r.id}`}
-                className="cursor-grab rounded border border-slate-700 p-1">
-                <SpriteThumb sheetUrl={spritesQ.data!.urlMap[r.sheet_url] ?? null}
-                  x={r.x} y={r.y} width={r.width} height={r.height} scale={1} />
+          {/* preview */}
+          <div className="dev-inset flex items-center justify-between p-2">
+            <div className="flex items-center gap-1">
+              <Button size="icon" variant="ghost" onClick={() => setDir((d) => (d - 1 + v.pattern_x) % v.pattern_x)}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-[10px] w-8 text-center text-slate-400">Dir: {dirLabel}</span>
+              <Button size="icon" variant="ghost" onClick={() => setDir((d) => (d + 1) % v.pattern_x)}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="text-[10px] text-slate-400">frame {frame + 1}/{v.frames}</div>
+            <Button size="icon" variant="ghost" onClick={() => setPlaying((p) => !p)}>
+              {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            </Button>
+          </div>
+
+          {/* GRID (composição desta direção+frame) */}
+          <div>
+            <div className="mb-1 text-xs uppercase tracking-wider text-emerald-400">
+              Composição · dir {dirLabel} · frame {frame + 1}
+            </div>
+            <div className="dev-inset p-2 inline-block"
+              style={{ display: "grid", gridTemplateColumns: `repeat(${v.width}, 64px)`, gap: 4 }}>
+              {Array.from({ length: v.height }).map((_, cy) =>
+                Array.from({ length: v.width }).map((_, cx) => {
+                  const key = `${frame}:${dir}:${cx}:${cy}`;
+                  const sid = cellMap.get(key);
+                  const sp = sid ? spriteById.get(sid) : null;
+                  return (
+                    <div key={key}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const id = Number(e.dataTransfer.getData("text/plain"));
+                        if (id) setCell(cx, cy, id);
+                      }}
+                      className="relative grid place-items-center rounded border"
+                      style={{ width: 64, height: 64, borderColor: sp ? "var(--dev-accent)" : "rgb(51,65,85)", background: "#0a0a0a" }}>
+                      {sp && allUrls[sp.sheet_url] ? (
+                        <>
+                          <SpriteThumb sheetUrl={allUrls[sp.sheet_url] ?? null}
+                            x={sp.x} y={sp.y} width={sp.width} height={sp.height} scale={2} />
+                          <button onClick={() => setCell(cx, cy, null)}
+                            className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-red-500 text-white">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-[9px] text-slate-600">drop</span>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* SPRITE POOL */}
+          <div>
+            <div className="mb-1 text-xs uppercase tracking-wider text-emerald-400">Sprite Pool (arraste)</div>
+            <Input placeholder="Buscar sprite (tag)…" value={search} onChange={(e) => setSearch(e.target.value)} className="mb-2" />
+            <div className="dev-inset max-h-[220px] overflow-y-auto p-2">
+              <div className="grid grid-cols-8 gap-1">
+                {(spritesQ.data?.rows ?? []).map((r: any) => (
+                  <div key={r.id}
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData("text/plain", String(r.id))}
+                    title={`#${r.id}`}
+                    className="cursor-grab rounded border border-slate-700 p-1">
+                    <SpriteThumb sheetUrl={spritesQ.data!.urlMap[r.sheet_url] ?? null}
+                      x={r.x} y={r.y} width={r.width} height={r.height} scale={1} />
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      ) : (
+        <PropertiesTab value={v} onChange={setV} />
+      )}
 
       <div className="flex gap-2 border-t border-slate-800 pt-3">
         <Button onClick={saveAll} disabled={saving || !v.name}
@@ -322,6 +438,17 @@ function ObjectComposer({
   );
 }
 
+function NumField({ label, v, onChange, min, max }: { label: string; v: number; onChange: (v: number) => void; min?: number; max?: number }) {
+  return (
+    <div>
+      <label className="block text-[10px] uppercase text-slate-400">{label}</label>
+      <Input type="number" min={min} max={max} value={v} onChange={(e) => onChange(Number(e.target.value) || 1)} />
+    </div>
+  );
+}
+
+/* ========================= Flags / Properties ========================= */
+
 function FlagsPanel({ value, onChange }: { value: ObjectRow; onChange: (v: ObjectRow) => void }) {
   const grouped = FLAG_DEFS.reduce<Record<string, typeof FLAG_DEFS>>((acc, f) => {
     (acc[f.group] ||= []).push(f); return acc;
@@ -329,7 +456,7 @@ function FlagsPanel({ value, onChange }: { value: ObjectRow; onChange: (v: Objec
   return (
     <div className="dev-panel p-4">
       <div className="mb-2 text-xs uppercase tracking-wider text-emerald-400">.dat Flags</div>
-      <div className="space-y-3">
+      <div className="max-h-[74vh] overflow-y-auto space-y-3 pr-1">
         {Object.entries(grouped).map(([grp, flags]) => (
           <div key={grp}>
             <div className="mb-1 text-[10px] uppercase text-slate-500">{grp}</div>
@@ -360,5 +487,225 @@ function FlagsPanel({ value, onChange }: { value: ObjectRow; onChange: (v: Objec
         )}
       </div>
     </div>
+  );
+}
+
+function PropertiesTab({ value, onChange }: { value: ObjectRow; onChange: (v: ObjectRow) => void }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="block text-[10px] uppercase text-slate-400">Palette group</label>
+        <Select value={value.palette_group ?? "none"} onValueChange={(x) => onChange({ ...value, palette_group: x === "none" ? null : x })}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">— nenhum —</SelectItem>
+            {["nature","town","dungeon","walls","creatures","items","effects","misc"].map((g) => (
+              <SelectItem key={g} value={g}>{g}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="dev-inset p-3 text-xs text-slate-400">
+        As flags do <code>.dat</code> ficam no painel da direita. Ajuste ID, Kind, dimensões, patterns e frames na aba Textura.
+      </div>
+    </div>
+  );
+}
+
+/* ============================ Import PNG ============================ */
+
+function ImportPngDialog({
+  onClose, category, onImported,
+}: { onClose: () => void; category: Category; onImported: () => void }) {
+  const importFn = useServerFn(importSpriteSheet);
+  const createFullFn = useServerFn(importObjectFull);
+  const nextIdFn = useServerFn(nextClientId);
+
+  const [file, setFile] = useState<File | null>(null);
+  const [tileSize, setTileSize] = useState(32);
+  const [preview, setPreview] = useState<{ tiles: Tile[]; cols: number; rows: number } | null>(null);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const isOutfit = category === "outfits";
+  const isMissile = category === "missiles";
+  const defaultKind = CATEGORIES.find((c) => c.id === category)!.defaultKind;
+
+  // shape defaults: outfit → 4 directions × 3 frames; effect → 1×N frames
+  const [shape, setShape] = useState({
+    width: 1, height: 1, layers: 1,
+    pattern_x: isOutfit ? 4 : 1, pattern_y: 1, pattern_z: 1, frames: 1,
+  });
+
+  async function pickFile(f: File) {
+    setFile(f);
+    const img = await loadImage(f);
+    const sliced = await sliceSheet(img, tileSize);
+    setPreview(sliced);
+    // guess shape for outfit sheets: cols = pattern_x * width, rows = frames * height
+    if (isOutfit) {
+      setShape((s) => ({ ...s, pattern_x: Math.min(4, sliced.cols), frames: sliced.rows }));
+    } else {
+      setShape((s) => ({ ...s, frames: sliced.rows * sliced.cols }));
+    }
+    if (!name) setName(f.name.replace(/\.[^.]+$/, ""));
+  }
+
+  async function reslice() {
+    if (!file) return;
+    const img = await loadImage(file);
+    setPreview(await sliceSheet(img, tileSize));
+  }
+
+  async function doImport() {
+    if (!preview || !file) return;
+    setBusy(true);
+    try {
+      const { spriteIds } = await importFn({
+        data: { tiles: preview.tiles, tagPrefix: name.toLowerCase().replace(/\s+/g, "_") },
+      });
+      // Compose object with shape
+      const totalTiles = preview.tiles.length;
+      const perObject = shape.width * shape.height * shape.layers * shape.pattern_x * shape.pattern_y * shape.pattern_z * shape.frames;
+      if (perObject === 0) throw new Error("Shape inválida");
+
+      // For simplicity import as a single object; if leftover, warn.
+      const useTiles = preview.tiles.slice(0, perObject);
+      const useIds = spriteIds.slice(0, perObject);
+      const cells = tilesToComposition(useTiles, shape).map((c) => ({
+        sprite_id: useIds[c.sprite_id_index],
+        cell_x: c.cell_x, cell_y: c.cell_y, layer: c.layer,
+        pattern_x: c.pattern_x, pattern_y: c.pattern_y, pattern_z: c.pattern_z,
+        frame: c.frame,
+      }));
+
+      let cid: number | null = null;
+      try { cid = (await nextIdFn({ data: { object_kind: defaultKind as any } })).next; } catch {}
+
+      await createFullFn({
+        data: {
+          object: {
+            name,
+            object_kind: defaultKind as any,
+            client_id: cid,
+            width: shape.width, height: shape.height, layers: shape.layers,
+            pattern_x: shape.pattern_x, pattern_y: shape.pattern_y, pattern_z: shape.pattern_z,
+            frames: shape.frames, frame_duration_ms: 250,
+            flags: isMissile ? { isMissile: true } : {},
+            palette_group: null,
+          },
+          cells,
+        },
+      });
+      onImported();
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Importar sheet PNG (Object Builder export)</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <input type="file" accept="image/png,image/jpeg" onChange={(e) => e.target.files?.[0] && pickFile(e.target.files[0])} />
+            <div>
+              <label className="block text-[10px] uppercase text-slate-400">Tile size</label>
+              <Input type="number" className="w-24" value={tileSize} onChange={(e) => setTileSize(Number(e.target.value) || 32)} onBlur={reslice} />
+            </div>
+          </div>
+
+          {preview && (
+            <>
+              <div className="text-xs text-slate-400">
+                Detectado: <b>{preview.cols}×{preview.rows}</b> tiles ({preview.tiles.length} total, {new Set(preview.tiles.map((t) => t.hash)).size} únicos)
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase text-slate-400">Nome do objeto</label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+
+              <div className="grid grid-cols-7 gap-2">
+                <NumField label="W" v={shape.width} onChange={(x)=>setShape({...shape,width:x})} min={1} max={4} />
+                <NumField label="H" v={shape.height} onChange={(x)=>setShape({...shape,height:x})} min={1} max={4} />
+                <NumField label="Layers" v={shape.layers} onChange={(x)=>setShape({...shape,layers:x})} min={1} max={4} />
+                <NumField label="Pat.X" v={shape.pattern_x} onChange={(x)=>setShape({...shape,pattern_x:x})} min={1} max={8} />
+                <NumField label="Pat.Y" v={shape.pattern_y} onChange={(x)=>setShape({...shape,pattern_y:x})} min={1} max={4} />
+                <NumField label="Pat.Z" v={shape.pattern_z} onChange={(x)=>setShape({...shape,pattern_z:x})} min={1} max={4} />
+                <NumField label="Frames" v={shape.frames} onChange={(x)=>setShape({...shape,frames:x})} min={1} max={16} />
+              </div>
+
+              <TilePreview tiles={preview.tiles} cols={preview.cols} />
+            </>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={doImport} disabled={!preview || !name || busy}
+            style={{ background: "var(--dev-accent)", color: "#052e2b" }}>
+            {busy ? "Importando…" : "Importar e criar objeto"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TilePreview({ tiles, cols }: { tiles: Tile[]; cols: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={ref} className="dev-inset max-h-[240px] overflow-auto p-2"
+      style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 34px)`, gap: 2 }}>
+      {tiles.map((t) => (
+        <img key={t.index} src={`data:image/png;base64,${t.base64Png}`}
+          width={32} height={32} style={{ imageRendering: "pixelated", background: "#0a0a0a" }} />
+      ))}
+    </div>
+  );
+}
+
+/* ============================ Import OBD ============================ */
+
+function ImportObdDialog({ onClose }: { onClose: () => void }) {
+  const [result, setResult] = useState<ReturnType<typeof parseObd> | null>(null);
+
+  async function pick(f: File) {
+    const buf = await f.arrayBuffer();
+    setResult(parseObd(buf));
+  }
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Importar arquivo .obd</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <input type="file" accept=".obd" onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])} />
+          {result && (
+            <div className="dev-inset p-3 text-xs space-y-1">
+              <div>Versão detectada: <b>{result.version}</b></div>
+              <div>Categoria: <b>{result.category}</b></div>
+              <div>Tamanho: <b>{result.raw.length} bytes</b></div>
+              {!result.supported && (
+                <div className="mt-2 rounded border border-yellow-700 bg-yellow-950/40 p-2 text-yellow-300">
+                  {result.reason}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Fechar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
