@@ -222,8 +222,8 @@ export class GameScene extends Phaser.Scene {
       for (const { key, url } of queued) this.load.image(key, url);
 
       const done = () => {
-        this.load.off(Phaser.Loader.Events.COMPLETE, done);
-        this.load.off(Phaser.Loader.Events.LOAD_ERROR, done);
+        this.load.off("complete", done);
+        this.load.off("loaderror", done);
         resolve();
       };
 
