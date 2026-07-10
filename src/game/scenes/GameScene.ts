@@ -44,6 +44,7 @@ type Tile = {
 
 export type GameSceneInit = {
   room?: Room;
+  characterName?: string;
   onLatency?: (ms: number) => void;
   onFps?: (fps: number) => void;
 };
@@ -65,6 +66,7 @@ export class GameScene extends Phaser.Scene {
   private pendingRoom: Room | null = null;
   private sheetKeyByUrl = new Map<string, string>();
   private fallbackPlayer: Phaser.GameObjects.Container | null = null;
+  private characterName = "Player";
 
   constructor() {
     super("GameScene");
@@ -74,6 +76,7 @@ export class GameScene extends Phaser.Scene {
     this.room = data.room ?? null;
     this.onLatency = data.onLatency;
     this.onFps = data.onFps;
+    if (data.characterName) this.characterName = data.characterName;
   }
 
   create() {
