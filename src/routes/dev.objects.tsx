@@ -208,7 +208,8 @@ function ObjectsPage() {
           onImported={() => qc.invalidateQueries({ queryKey: ["objects"] })} />
       )}
       {importOpen === "obd" && (
-        <ImportObdDialog onClose={() => setImportOpen(null)} />
+        <ImportObdDialog onClose={() => setImportOpen(null)} category={tab}
+          onImported={() => qc.invalidateQueries({ queryKey: ["objects"] })} />
       )}
     </div>
   );
