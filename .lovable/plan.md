@@ -1,54 +1,77 @@
+## Objetivo
 
-## Diagnóstico
+Reproduzir o fluxo do Tibia: cadastro → login → seleção/criação de personagem → carregamento completo do jogo → "Entrar no jogo" (só habilitado quando servidor conectado e assets carregados). Corrigir renderização do mapa e usar o nome do personagem em vez de "You".
 
-Dois problemas se somando causam a tela preta:
+## Fluxo de telas
 
-1. **Colyseus não conecta.** Console mostra `[Colyseus] Falha ao conectar` no WebSocket para `wss://fibula.pro`. Hoje, se essa conexão falha, o `PhaserCanvas` **retorna antes de inicializar o Phaser** — então nem os tiles do Supabase são desenhados. Resultado: preto total.
-2. **Viewport travado em 15/11.** `GameViewport` força `aspectRatio: "15 / 11"`, deixando barras pretas laterais mesmo quando renderiza.
+```text
+/auth (login/cadastro por e-mail e senha, já existe)
+  → /characters   (lista de personagens do usuário)
+        ├─ [Criar personagem] → /characters/new (nome + vocação)
+        └─ [Selecionar personagem]
+              → /play/:characterId  (tela de "Carregando…" + botão Entrar no jogo)
+                    → /game/:characterId  (Tibia Shell + Phaser)
+```
 
-## O que vou fazer (frontend)
+Regras:
+- `/characters`, `/play/*`, `/game/*` ficam sob `_authenticated` (redireciona para `/auth`).
+- Botão **Entrar no jogo** só habilita quando: (a) sessão Colyseus conectada com sucesso, (b) mapa + sprites do Phaser 100% carregados, (c) dados do personagem carregados do Supabase. Enquanto isso mostra barra de progresso com etapas (Autenticando / Conectando servidor / Carregando mapa / Carregando sprites / Pronto).
+- Se o servidor Colyseus falhar, mostra erro com botão "Tentar novamente" e mantém o botão Entrar desabilitado — nunca deixa o usuário entrar em um jogo desconectado.
 
-**1. Desacoplar render do mapa da conexão Colyseus** (`src/components/tibia/PhaserCanvas.tsx`)
-- Ordem nova: sempre monta o Phaser + `GameScene` imediatamente → chama `loadWorldFromDB()` do Supabase → então tenta `joinGameRoom` em paralelo.
-- Se o Colyseus falhar, o mapa continua visível. Aparece um overlay discreto no topo esquerdo: “Desconectado do servidor · Tentar novamente”.
-- Quando o room conecta, o `GameScene` recebe o room via um novo método `attachRoom(room)` e passa a spawnar players.
+## Backend (Supabase)
 
-**2. Ajustar `GameScene` para funcionar sem room** (`src/game/scenes/GameScene.ts`)
-- `init()` não exige mais `room`. Se não houver room, apenas não faz `wireRoom` e não escuta input de movimento.
-- Novo `attachRoom(room)` que roda o `wireRoom` atual.
-- Enquanto não há player local, câmera fica centralizada no spawn configurado (10,10) via `centerOn(SPAWN_X*TILE, SPAWN_Y*TILE)` — o mapa já aparece “enquadrado” como no Tibia.
-- Como o server define spawn via env, o cliente lê `VITE_SPAWN_X/Y` (default 10/10) só para o enquadramento inicial.
+Nova migration:
 
-**3. Viewport ocupa toda a área acima do chat** (`src/components/tibia/GameViewport.tsx`)
-- Remover `aspectRatio: "15 / 11"` e o wrapper interno. O `<PhaserCanvas />` passa a preencher 100% da largura e altura disponíveis (o `Phaser.Scale.RESIZE` já cuida do redimensionamento).
-- Chat continua com `h-52` fixo embaixo; sidebar direita continua igual → o mapa preenche exatamente o retângulo preto que sobrou.
+- `public.characters` — colunas de domínio: `user_id` (FK `auth.users`, cascade), `name` (unique, citext), `vocation` (enum: `none`, `knight`, `paladin`, `sorcerer`, `druid`), `level` (default 1), `experience` (default 0), `hp`, `hp_max`, `mana`, `mana_max`, `cap`, `speed`, `pos_x`, `pos_y`, `pos_z` (spawn default 10/10/7), `last_login_at`.
+- `public.vocations_catalog` (read-only lookup) — id, name, description, hp_base, mana_base, cap_base para popular a tela de criação (seed com as 4 vocações clássicas).
+- GRANTs completos + RLS:
+  - `characters`: SELECT/INSERT/UPDATE/DELETE apenas do dono (`auth.uid() = user_id`); service_role total (game-server usa service key).
+  - `vocations_catalog`: SELECT para `anon` e `authenticated`.
+- Trigger `updated_at`.
+- Índice único case-insensitive em `name`.
 
-**4. Personagem no meio, estilo Tibia**
-- Já usamos `cameras.main.startFollow(container, true, 0.15, 0.15)` para o player local. Vou adicionar `setZoom(2)` (já existe) + `roundPixels` + garantir que o follow acontece assim que o player local entra em `players.onAdd`. Sem room, câmera fica no spawn (item 2).
+Server functions (client-safe `*.functions.ts`):
+- `listMyCharacters()` — usa `requireSupabaseAuth`.
+- `createCharacter({ name, vocation })` — valida nome (3–20, [a-zA-Z ], único), aplica stats iniciais por vocação.
+- `deleteCharacter({ id })`.
+- `getCharacter({ id })` — usado por `/play/:id` e `/game/:id`.
 
-## Infra (você roda na VM, fora do meu escopo)
+## Frontend
 
-O erro `wss://fibula.pro` provavelmente é um dos três:
-- `pm2 status` → processo `olddungeons` caiu. `pm2 restart olddungeons --update-env`.
-- Nginx não faz upgrade pra WebSocket. O bloco do `fibula.pro` precisa ter dentro do `location /`:
-  ```
-  proxy_http_version 1.1;
-  proxy_set_header Upgrade $http_upgrade;
-  proxy_set_header Connection "upgrade";
-  proxy_pass http://127.0.0.1:2567;
-  ```
-- Certificado TLS ausente/expirado → `sudo certbot --nginx -d fibula.pro`.
+Novas rotas:
+- `src/routes/_authenticated/route.tsx` (gate já gerenciado pela integração; garantir presença).
+- `src/routes/_authenticated/characters.tsx` — grid de personagens + botão criar + logout. Query com `useSuspenseQuery(listMyCharacters)`.
+- `src/routes/_authenticated/characters.new.tsx` — form (nome + escolha de vocação com card por vocação lendo `vocations_catalog`).
+- `src/routes/_authenticated/play.$characterId.tsx` — tela de loading:
+  - dispara em paralelo: `joinGameRoom(character.name)`, pré-carrega mapa/sprites (chama `getMapTiles` + faz `Image.decode()` em cada `sheet_url` para garantir cache), busca `getCharacter`.
+  - mostra progresso por etapa; botão **Entrar no jogo** desabilitado até tudo estar `ready`.
+  - ao clicar, navega para `/game/:id` passando via store (`useGameSessionStore`) a `room` e o `character` já carregados.
+- `src/routes/_authenticated/game.$characterId.tsx` — renderiza `TibiaShell`, consumindo `room` e `character` da store. Se recarregar direto nessa URL sem sessão preparada, redireciona para `/play/:id`.
 
-Rode `curl -i https://fibula.pro/` e cole a resposta se quiser que eu diagnostique.
+Ajustes de código existente:
+- `src/routes/index.tsx` — redireciona logado para `/characters`, deslogado para `/auth`. Remove `TibiaShell` daí.
+- `useTibiaStore.character` deixa de ter mock "Morgado"; passa a ser hidratado do personagem selecionado (nome, hp, mana, cap, speed, vocation, level).
+- Novo `useGameSessionStore` (zustand) com `{ room, character, phase: 'idle'|'connecting'|'loading'|'ready'|'error', errors }`.
+- `PhaserCanvas` deixa de conectar sozinho ao Colyseus; passa a receber `room` e `character` via props/store (a conexão vive na tela `/play`).
+- `GameScene`:
+  - Corrigir sprites: usar `add.image` com `crop` está errado para tiles vindos de sheet — trocar por `this.textures.addSpriteSheetFromAtlas` ou criar `frame` dinâmico via `this.textures.get(key).add(frameName, 0, sp.x, sp.y, sp.width, sp.height)` e usar `this.add.image(x, y, key, frameName)` com `setDisplaySize(TILE, TILE)`. Isso resolve o "sprite errado".
+  - `fallbackPlayer` e labels dos players devem usar `character.name` da store (não "You" fixo).
+  - Ao conectar Colyseus, o label do jogador local passa a ser `character.name`.
 
-## Arquivos alterados
+## Servidor Colyseus
 
-- `src/components/tibia/PhaserCanvas.tsx` — mapa carrega antes da conexão; overlay de erro com retry.
-- `src/components/tibia/GameViewport.tsx` — remove trava de aspecto.
-- `src/game/scenes/GameScene.ts` — `attachRoom` opcional; câmera centraliza no spawn quando sem player.
+O servidor em `wss://fibula.pro` está indisponível ("servidor indisponível" no banner). O plano cobre apenas o cliente + fluxo; o deploy do `game-server/` no host próprio continua responsabilidade separada. Documentaremos no `game-server/README.md` que sem servidor online o botão Entrar do `/play` fica desabilitado — comportamento esperado.
 
-## Fora de escopo agora
+## Detalhes técnicos
 
-- Não vou mexer no game-server (spawn/movimento já foram feitos no turno anterior).
-- Não vou reescrever a sidebar/chat.
-- Não vou tocar no editor de mapa.
+- Todas as server functions autenticadas usam `requireSupabaseAuth`; chamadas do componente via `useServerFn` + TanStack Query.
+- Validação de input com Zod dentro de `.inputValidator()`.
+- Preload de sprites em `/play`: buscar `urlMap` de `getMapTiles`, criar `Image()` para cada URL, aguardar `img.decode()`; assim quando `GameScene` roda no `/game`, `this.load.image` cai em cache do browser e o boot é instantâneo.
+- Labels em Phaser: passar `character.name` no `init(data)` do `GameScene`.
+- Rota `/` → redirect: logado ⇒ `/characters`, deslogado ⇒ `/auth`.
+
+## Fora de escopo (não faremos agora)
+
+- Deploy do Colyseus server (`game-server/`).
+- Sistema de combate, inventário funcional, chat multi-canal — permanecem como estão.
+- Delete de conta / recuperar senha.
