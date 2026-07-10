@@ -179,7 +179,8 @@ export class GameScene extends Phaser.Scene {
 
     container.add([shadow, body, head, label]);
     this.fallbackPlayer = container;
-    this.cameras.main.startFollow(container, true, 0.15, 0.15);
+    this.cameras.main.startFollow(container, true, 1, 1);
+    this.cameras.main.centerOn(x, y);
   }
 
   private async loadWorldFromDB() {
@@ -258,6 +259,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private moveTo(vis: PlayerVisual, x: number, y: number, instant = false) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return; // ignora NaN
     if (vis.tween) {
       vis.tween.stop();
       vis.tween = null;
@@ -296,7 +298,10 @@ export class GameScene extends Phaser.Scene {
     const addPlayer = (p: PlayerLike, sessionId: string) => {
       if (this.players.has(sessionId)) return;
       const isMe = sessionId === room.sessionId;
-      const container = this.add.container(p.x, p.y);
+      // Sanidade: se o servidor mandou NaN, cai pro spawn (evita ficar no canto).
+      const safeX = Number.isFinite(p.x) ? p.x : SPAWN_X * TILE + TILE / 2;
+      const safeY = Number.isFinite(p.y) ? p.y : SPAWN_Y * TILE + TILE / 2;
+      const container = this.add.container(safeX, safeY);
       container.setDepth(10);
       const rect = this.add.rectangle(0, 0, TILE - 6, TILE - 6, isMe ? 0x4fa4ff : 0xd4b46a);
       rect.setStrokeStyle(1, 0x000000);
@@ -315,7 +320,8 @@ export class GameScene extends Phaser.Scene {
       if (isMe) {
         this.fallbackPlayer?.destroy();
         this.fallbackPlayer = null;
-        this.cameras.main.startFollow(container, true, 0.15, 0.15);
+        this.cameras.main.startFollow(container, true, 1, 1);
+        this.cameras.main.centerOn(container.x, container.y);
       }
 
       const anyPlayer = p as unknown as {
@@ -433,14 +439,21 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (dir) {
-      const tileX = Math.round(me.x / TILE) + dx;
-      const tileY = Math.round(me.y / TILE) + dy;
+      // Se o servidor ainda mandou posição inválida, usa a posição visual atual como referência.
+      const baseX = Number.isFinite(me.x) ? me.x : myVis.container.x;
+      const baseY = Number.isFinite(me.y) ? me.y : myVis.container.y;
+      const tileX = Math.round(baseX / TILE) + dx;
+      const tileY = Math.round(baseY / TILE) + dy;
+      if (tileX < 0 || tileY < 0 || tileX >= this.mapCols || tileY >= this.mapRows) {
+        this.nextMoveAt = this.time.now + 100;
+        return;
+      }
       if (this.blockingSet.has(`${tileX},${tileY}`)) {
         this.nextMoveAt = this.time.now + 100;
         return;
       }
-      const nx = me.x + dx * TILE;
-      const ny = me.y + dy * TILE;
+      const nx = tileX * TILE;
+      const ny = tileY * TILE;
       this.lastMoveSentAt = Date.now();
       this.room.send("move", { direction: dir });
       this.moveTo(myVis, nx, ny);
