@@ -44,6 +44,7 @@ type Tile = {
 
 export type GameSceneInit = {
   room?: Room;
+  characterName?: string;
   onLatency?: (ms: number) => void;
   onFps?: (fps: number) => void;
 };
@@ -65,6 +66,7 @@ export class GameScene extends Phaser.Scene {
   private pendingRoom: Room | null = null;
   private sheetKeyByUrl = new Map<string, string>();
   private fallbackPlayer: Phaser.GameObjects.Container | null = null;
+  private characterName = "Player";
 
   constructor() {
     super("GameScene");
@@ -74,6 +76,7 @@ export class GameScene extends Phaser.Scene {
     this.room = data.room ?? null;
     this.onLatency = data.onLatency;
     this.onFps = data.onFps;
+    if (data.characterName) this.characterName = data.characterName;
   }
 
   create() {
@@ -148,7 +151,7 @@ export class GameScene extends Phaser.Scene {
     body.setStrokeStyle(1, 0x061018);
     const head = this.add.rectangle(0, -8, 14, 10, 0xf1c28a);
     head.setStrokeStyle(1, 0x061018);
-    const label = this.add.text(0, -TILE / 2 - 9, "You", {
+    const label = this.add.text(0, -TILE / 2 - 9, this.characterName, {
       fontFamily: "Verdana, Tahoma, sans-serif",
       fontSize: "10px",
       color: "#7fd4ff",
@@ -202,9 +205,13 @@ export class GameScene extends Phaser.Scene {
       const texKey = this.sheetKeyByUrl.get(sp.sheet_url);
       if (!texKey) continue;
       if (!this.textures.exists(texKey)) continue;
-      const img = this.add.image(t.x * TILE, t.y * TILE, texKey);
+      const tex = this.textures.get(texKey);
+      const frameName = `f_${sp.id}`;
+      if (!tex.has(frameName)) {
+        tex.add(frameName, 0, sp.x, sp.y, sp.width, sp.height);
+      }
+      const img = this.add.image(t.x * TILE, t.y * TILE, texKey, frameName);
       img.setOrigin(0, 0);
-      img.setCrop(sp.x, sp.y, sp.width, sp.height);
       img.setDisplaySize(TILE, TILE);
       img.setDepth(t.layer === "floor" ? 1 : 2);
       if (t.blocking) this.blockingSet.add(`${t.x},${t.y}`);
