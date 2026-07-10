@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import ws from "ws";
 
 /**
  * Cliente Supabase ÚNICO por processo.
@@ -23,7 +24,7 @@ export function supabase(): SupabaseClient {
 
   _client = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
-    realtime: { params: { eventsPerSecond: 10 } },
+    realtime: { params: { eventsPerSecond: 10 }, transport: ws as any },
     global: { headers: { "x-application": "olddungeons-colyseus" } },
   });
 
