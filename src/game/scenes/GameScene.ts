@@ -23,7 +23,7 @@ type PlayersCallbacks = {
 };
 
 type PlayerCallbacks = {
-  listen: (player: PlayerLike, field: "x" | "y" | "name", cb: (value: unknown, previousValue: unknown) => void) => void;
+  listen: (field: "x" | "y" | "name", cb: (value: unknown, previousValue: unknown) => void) => void;
 };
 
 type StateCallbackProxy = {
