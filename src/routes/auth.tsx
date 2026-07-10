@@ -32,7 +32,7 @@ const nameSchema = z
 function AuthPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
-  const redirectTo = sanitizeRedirect(search.redirect) ?? "/";
+  const redirectTo = getAuthDestination(search.redirect);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -50,7 +50,7 @@ function AuthPage() {
           <div className="text-2xl font-semibold" style={{ color: "var(--dev-text)" }}>
             Retro Idle Forge
           </div>
-          <div className="text-xs text-slate-400">Entre no mundo ou crie seu personagem.</div>
+          <div className="text-xs text-slate-400">Entre na sua conta para escolher ou criar personagem.</div>
         </div>
 
         <Tabs defaultValue="signin" className="w-full">
@@ -67,13 +67,19 @@ function AuthPage() {
         </Tabs>
 
         <div className="text-center text-xs text-slate-500">
-          <Link to="/" className="hover:underline">
-            ← Voltar para o jogo
+          <Link to="/characters" className="hover:underline">
+            ← Voltar para personagens
           </Link>
         </div>
       </div>
     </div>
   );
+}
+
+function getAuthDestination(r?: string): string {
+  const safe = sanitizeRedirect(r);
+  if (!safe || safe === "/" || safe === "/auth") return "/characters";
+  return safe;
 }
 
 function sanitizeRedirect(r?: string): string | null {
@@ -136,7 +142,6 @@ function SignInForm({ onDone }: { onDone: () => void }) {
 function SignUpForm({ onDone }: { onDone: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [characterName, setCharacterName] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -144,11 +149,6 @@ function SignUpForm({ onDone }: { onDone: () => void }) {
     e.preventDefault();
     setErr(null);
 
-    const nameCheck = nameSchema.safeParse(characterName);
-    if (!nameCheck.success) {
-      setErr(`Nome do personagem: ${nameCheck.error.issues[0].message}`);
-      return;
-    }
     if (password.length < 6) {
       setErr("Senha deve ter ao menos 6 caracteres.");
       return;
@@ -156,15 +156,13 @@ function SignUpForm({ onDone }: { onDone: () => void }) {
 
     setLoading(true);
 
-    // 1. Try sign up (if user already exists, try sign in instead so we can attach profile)
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: { emailRedirectTo: window.location.origin },
     });
 
-    let userId = signUpData?.user?.id ?? null;
-    let session = signUpData?.session ?? null;
+    const session = signUpData?.session ?? null;
 
     if (signUpError) {
       setLoading(false);
@@ -172,48 +170,19 @@ function SignUpForm({ onDone }: { onDone: () => void }) {
       return;
     }
 
-    // If email confirmation is required, no session yet.
     if (!session) {
       setLoading(false);
       toast.success("Conta criada! Verifique seu email para confirmar e depois entre.");
       return;
     }
 
-    // 2. Insert profile with character_name.
-    if (userId) {
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .insert({ id: userId, character_name: characterName });
-
-      if (profileError) {
-        setLoading(false);
-        if (profileError.code === "23505") {
-          setErr("Esse nome de personagem já está em uso. Escolha outro.");
-        } else {
-          setErr(profileError.message);
-        }
-        return;
-      }
-    }
-
     setLoading(false);
-    toast.success(`Bem-vindo, ${characterName}!`);
+    toast.success("Conta criada! Agora escolha ou crie seu personagem.");
     onDone();
   }
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <Input
-        type="text"
-        placeholder="Nome do personagem"
-        value={characterName}
-        onChange={(e) => setCharacterName(e.target.value)}
-        required
-        minLength={3}
-        maxLength={20}
-        autoComplete="username"
-      />
-      <div className="text-[10px] text-slate-500">3–20 caracteres. Letras, números e _.</div>
       <Input
         type="email"
         placeholder="Email"
@@ -238,7 +207,7 @@ function SignUpForm({ onDone }: { onDone: () => void }) {
         className="w-full"
         style={{ background: "var(--dev-accent)", color: "#052e2b" }}
       >
-        {loading ? "Criando…" : "Criar personagem"}
+        {loading ? "Criando…" : "Criar conta"}
       </Button>
     </form>
   );
