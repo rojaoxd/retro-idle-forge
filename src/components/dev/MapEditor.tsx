@@ -229,7 +229,7 @@ export function MapEditor() {
   }
 
   function pickAt(x: number, y: number) {
-    const t = byCell.get(`${z}:${layer}:${x}:${y}`);
+    const t = effectiveAt(x, y, z, layer);
     if (!t) return;
     const sp = spriteById.get(t.tile_id);
     if (sp) setSelectedSprite(sp);
@@ -239,12 +239,42 @@ export function MapEditor() {
 
   function applyAt(x: number, y: number, button: number) {
     if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return;
-    if (button === 2) return del.mutate({ x, y, z, layer });
+    if (button === 2) return stageDel(x, y);
     if (tool === "erase") return eraseCell(x, y);
     if (tool === "pick") return pickAt(x, y);
     if (tool === "fill") return fillFrom(x, y);
     if (!selectedSprite) return;
     paintCell(x, y);
+  }
+
+  async function saveDraft() {
+    if (!dirty) return;
+    const puts: any[] = [];
+    const dels: any[] = [];
+    for (const v of draft.values()) {
+      if (v.op === "put") {
+        const row: any = { x: v.x, y: v.y, z: v.z, layer: v.layer, tile_id: v.tile_id, blocking: v.blocking };
+        if (v.layer === "spawn") row.spawn_monster_id = v.spawn_monster_id ?? null;
+        puts.push(row);
+      } else {
+        dels.push({ x: v.x, y: v.y, z: v.z, layer: v.layer });
+      }
+    }
+    try {
+      if (puts.length) await paint.mutateAsync(puts);
+      if (dels.length) await delBulk.mutateAsync(dels);
+      setDraft(new Map());
+      await qc.invalidateQueries({ queryKey: ["map-tiles"] });
+      toast.success(`Mapa salvo (${puts.length} atualizações, ${dels.length} remoções)`);
+    } catch (e: any) {
+      toast.error(`Falha ao salvar: ${e?.message ?? e}`);
+    }
+  }
+
+  function discardDraft() {
+    if (!dirty) return;
+    if (!confirm(`Descartar ${draft.size} alteração(ões) pendente(s)?`)) return;
+    setDraft(new Map());
   }
 
   function cellFromEvent(e: React.MouseEvent<HTMLDivElement>) {
