@@ -6,6 +6,9 @@ const TILE = 32;
 // Tibia 7.4: caminhada base em chão normal ~500ms/SQM.
 const STEP_MS = 500;
 
+const SPAWN_X = Number(import.meta.env.VITE_SPAWN_X ?? 10);
+const SPAWN_Y = Number(import.meta.env.VITE_SPAWN_Y ?? 10);
+
 type PlayerLike = { x: number; y: number; name: string };
 type PlayersMap = {
   onAdd: (cb: (player: PlayerLike, sessionId: string) => void) => void;
@@ -40,13 +43,13 @@ type Tile = {
 };
 
 export type GameSceneInit = {
-  room: Room;
+  room?: Room;
   onLatency?: (ms: number) => void;
   onFps?: (fps: number) => void;
 };
 
 export class GameScene extends Phaser.Scene {
-  private room!: Room;
+  private room: Room | null = null;
   private players = new Map<string, PlayerVisual>();
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<"W" | "A" | "S" | "D", Phaser.Input.Keyboard.Key>;
@@ -58,13 +61,15 @@ export class GameScene extends Phaser.Scene {
   private blockingSet = new Set<string>();
   private mapCols = 40;
   private mapRows = 30;
+  private mapReady = false;
+  private pendingRoom: Room | null = null;
 
   constructor() {
     super("GameScene");
   }
 
   init(data: GameSceneInit) {
-    this.room = data.room;
+    this.room = data.room ?? null;
     this.onLatency = data.onLatency;
     this.onFps = data.onFps;
   }
@@ -84,7 +89,25 @@ export class GameScene extends Phaser.Scene {
 
     void this.loadWorldFromDB()
       .catch((e) => console.warn("[GameScene] falha carregando mapa:", e))
-      .finally(() => this.wireRoom());
+      .finally(() => {
+        this.mapReady = true;
+        // Centraliza no spawn até termos player local
+        this.cameras.main.centerOn(SPAWN_X * TILE + TILE / 2, SPAWN_Y * TILE + TILE / 2);
+        // Room que chegou antes do mapa? Anexa agora.
+        const r = this.pendingRoom ?? this.room;
+        if (r) this.wireRoom(r);
+      });
+  }
+
+  /** Chamado pelo PhaserCanvas quando o Colyseus conectar (pode ser depois do create). */
+  attachRoom(room: Room) {
+    if (this.room === room) return;
+    this.room = room;
+    if (!this.mapReady) {
+      this.pendingRoom = room;
+      return;
+    }
+    this.wireRoom(room);
   }
 
   private drawFallback() {
@@ -102,7 +125,6 @@ export class GameScene extends Phaser.Scene {
       urlMap: Record<string, string | null>;
     };
 
-    // Carrega folhas de sprites únicas como texturas do Phaser
     const uniqueSheets = Array.from(new Set(sprites.map((s) => s.sheet_url)));
     await Promise.all(
       uniqueSheets.map((path) => this.loadTexture(`sheet:${path}`, urlMap[path] ?? "")),
@@ -111,7 +133,6 @@ export class GameScene extends Phaser.Scene {
     const spriteById = new Map<number, Sprite>();
     for (const s of sprites) spriteById.set(s.id, s);
 
-    // Calcula extent
     if (tiles.length) {
       let maxX = 0;
       let maxY = 0;
@@ -124,7 +145,6 @@ export class GameScene extends Phaser.Scene {
       this.cameras.main.setBounds(0, 0, this.mapCols * TILE, this.mapRows * TILE);
     }
 
-    // Ordena: floor primeiro, obstacles depois
     const ordered = [...tiles].sort((a, b) =>
       a.layer === b.layer ? 0 : a.layer === "floor" ? -1 : 1,
     );
@@ -137,20 +157,9 @@ export class GameScene extends Phaser.Scene {
       const img = this.add.image(t.x * TILE, t.y * TILE, texKey);
       img.setOrigin(0, 0);
       img.setCrop(sp.x, sp.y, sp.width, sp.height);
-      // Desloca para que o crop apareça alinhado à origem
       img.setPosition(t.x * TILE - sp.x, t.y * TILE - sp.y);
       img.setDepth(t.layer === "floor" ? 1 : 2);
       if (t.blocking) this.blockingSet.add(`${t.x},${t.y}`);
-    }
-
-    // Envia colisões pro servidor Colyseus (fallback: servidor idealmente lê direto do Supabase)
-    const blockingTiles = tiles
-      .filter((t) => t.blocking)
-      .map((t) => ({ x: t.x, y: t.y }));
-    try {
-      this.room.send("map:sync", { tiles: blockingTiles });
-    } catch {
-      /* ignora se servidor não conhecer a mensagem */
     }
   }
 
@@ -189,17 +198,17 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private wireRoom() {
-    const state = this.room.state as { players?: PlayersMap };
+  private wireRoom(room: Room) {
+    const state = room.state as { players?: PlayersMap };
     const players = state?.players;
     if (!players) {
-      this.room.onStateChange.once(() => this.wireRoom());
+      room.onStateChange.once(() => this.wireRoom(room));
       return;
     }
 
     const addPlayer = (p: PlayerLike, sessionId: string) => {
       if (this.players.has(sessionId)) return;
-      const isMe = sessionId === this.room.sessionId;
+      const isMe = sessionId === room.sessionId;
       const container = this.add.container(p.x, p.y);
       container.setDepth(10);
       const rect = this.add.rectangle(0, 0, TILE - 6, TILE - 6, isMe ? 0x4fa4ff : 0xd4b46a);
@@ -233,7 +242,7 @@ export class GameScene extends Phaser.Scene {
         if (Math.round(targetX) !== Math.round(p.x) || Math.round(targetY) !== Math.round(p.y)) {
           this.moveTo(v, p.x, p.y);
         }
-        if (sessionId === this.room.sessionId && this.lastMoveSentAt > 0) {
+        if (sessionId === room.sessionId && this.lastMoveSentAt > 0) {
           this.onLatency?.(Math.max(1, Date.now() - this.lastMoveSentAt));
           this.lastMoveSentAt = 0;
         }
@@ -266,6 +275,8 @@ export class GameScene extends Phaser.Scene {
       this.onFps?.(Math.round(this.game.loop.actualFps));
     }
 
+    if (!this.room) return;
+
     const ae = typeof document !== "undefined" ? document.activeElement : null;
     if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA")) return;
 
@@ -296,7 +307,6 @@ export class GameScene extends Phaser.Scene {
     if (dir) {
       const tileX = Math.round(me.x / TILE) + dx;
       const tileY = Math.round(me.y / TILE) + dy;
-      // Client-side collision check (autoridade continua no servidor)
       if (this.blockingSet.has(`${tileX},${tileY}`)) {
         this.nextMoveAt = this.time.now + 100;
         return;
