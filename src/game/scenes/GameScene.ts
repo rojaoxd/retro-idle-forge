@@ -17,10 +17,18 @@ type PlayersMap = {
   forEach: (cb: (player: PlayerLike, sessionId: string) => void) => void;
 };
 
-type StateCallbacks = {
-  onAdd: (field: "players", cb: (player: PlayerLike, sessionId: string) => void) => void;
-  onRemove: (field: "players", cb: (player: PlayerLike, sessionId: string) => void) => void;
+type PlayersCallbacks = {
+  onAdd: (cb: (player: PlayerLike, sessionId: string) => void, immediate?: boolean) => void;
+  onRemove: (cb: (player: PlayerLike, sessionId: string) => void) => void;
+};
+
+type PlayerCallbacks = {
   listen: (player: PlayerLike, field: "x" | "y" | "name", cb: (value: unknown, previousValue: unknown) => void) => void;
+};
+
+type StateCallbackProxy = {
+  (target: { players?: PlayersMap }): { players?: PlayersCallbacks };
+  (target: PlayerLike): PlayerCallbacks;
 };
 
 type PlayerVisual = {
@@ -281,7 +289,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const callbacks = getStateCallbacks(room) as unknown as StateCallbacks | undefined;
+    const callbacks = getStateCallbacks(room) as unknown as StateCallbackProxy | undefined;
+    const playersCallbacks = callbacks?.(state).players;
     this.wiredRoom = room;
 
     const addPlayer = (p: PlayerLike, sessionId: string) => {
@@ -328,9 +337,10 @@ export class GameScene extends Phaser.Scene {
         }
       };
       if (callbacks) {
-        callbacks.listen(p, "x", update);
-        callbacks.listen(p, "y", update);
-        callbacks.listen(p, "name", () => {
+        const playerCallbacks = callbacks(p);
+        playerCallbacks.listen("x", update);
+        playerCallbacks.listen("y", update);
+        playerCallbacks.listen("name", () => {
           const v = this.players.get(sessionId);
           if (v) v.label.setText(p.name ?? "?");
         });
@@ -350,9 +360,9 @@ export class GameScene extends Phaser.Scene {
       this.players.delete(sessionId);
     };
 
-    if (callbacks) {
-      callbacks.onAdd("players", addPlayer);
-      callbacks.onRemove("players", removePlayer);
+    if (playersCallbacks) {
+      playersCallbacks.onAdd(addPlayer);
+      playersCallbacks.onRemove(removePlayer);
     } else if (typeof players.onAdd === "function" && typeof players.onRemove === "function") {
       players.onAdd(addPlayer);
       players.onRemove(removePlayer);
