@@ -1,64 +1,54 @@
-## Objetivo
 
-Permitir logar → cair no mapa → andar. Editor de mapa passa a ter Salvar manual.
+## Diagnóstico
 
-## 1. Spawn fixo do jogador (game-server)
+Dois problemas se somando causam a tela preta:
 
-- Ler spawn de `server_configs` (chaves `spawn_x`, `spawn_y`, `spawn_z`), com fallback `10,10,7`. Cache já existe em `WorldCache`; adicionar `WorldCache.spawnPoint()`.
-- `GameRoom.onJoin`: setar `p.x = spawn.x * TILE`, `p.y = spawn.y * TILE`, `p.z = spawn.z` (o client já trata `x/y` em pixels).
-- Persistir posição do jogador em `PlayerWriter` já em tiles (dividir por TILE ao salvar; guardar TILE constante compartilhada).
+1. **Colyseus não conecta.** Console mostra `[Colyseus] Falha ao conectar` no WebSocket para `wss://fibula.pro`. Hoje, se essa conexão falha, o `PhaserCanvas` **retorna antes de inicializar o Phaser** — então nem os tiles do Supabase são desenhados. Resultado: preto total.
+2. **Viewport travado em 15/11.** `GameViewport` força `aspectRatio: "15 / 11"`, deixando barras pretas laterais mesmo quando renderiza.
 
-## 2. Movimentação — padronizar protocolo
+## O que vou fazer (frontend)
 
-Hoje: client envia `{direction}`, server espera `{x,y}` em tiles e não avança nada em pixels. Vamos alinhar em **tiles no server, pixels no client**.
+**1. Desacoplar render do mapa da conexão Colyseus** (`src/components/tibia/PhaserCanvas.tsx`)
+- Ordem nova: sempre monta o Phaser + `GameScene` imediatamente → chama `loadWorldFromDB()` do Supabase → então tenta `joinGameRoom` em paralelo.
+- Se o Colyseus falhar, o mapa continua visível. Aparece um overlay discreto no topo esquerdo: “Desconectado do servidor · Tentar novamente”.
+- Quando o room conecta, o `GameScene` recebe o room via um novo método `attachRoom(room)` e passa a spawnar players.
 
-- Constante `TILE = 32` compartilhada (nova `game-server/src/constants.ts`).
-- `Player.x/y` no state = **pixels** (para tween linear no client, como já é).
-- Handler `move` do servidor: aceita `{ direction: "up"|"down"|"left"|"right" }`.
-  - Calcula `nextTileX = round(p.x / TILE) + dx`, idem Y.
-  - Rejeita se `WorldCache.isBlocking(nextTileX, nextTileY, p.z)` ou fora do mapa.
-  - Rate-limit server-side ~450ms/step (autoridade: client anima 500ms).
-  - Atualiza `p.x = nextTileX * TILE`, `p.y = nextTileY * TILE`.
-- Manter mensagem `map:sync` que o client envia como no-op por enquanto (WorldCache já lê do Supabase).
+**2. Ajustar `GameScene` para funcionar sem room** (`src/game/scenes/GameScene.ts`)
+- `init()` não exige mais `room`. Se não houver room, apenas não faz `wireRoom` e não escuta input de movimento.
+- Novo `attachRoom(room)` que roda o `wireRoom` atual.
+- Enquanto não há player local, câmera fica centralizada no spawn configurado (10,10) via `centerOn(SPAWN_X*TILE, SPAWN_Y*TILE)` — o mapa já aparece “enquadrado” como no Tibia.
+- Como o server define spawn via env, o cliente lê `VITE_SPAWN_X/Y` (default 10/10) só para o enquadramento inicial.
 
-## 3. Editor de mapa — Salvar manual
+**3. Viewport ocupa toda a área acima do chat** (`src/components/tibia/GameViewport.tsx`)
+- Remover `aspectRatio: "15 / 11"` e o wrapper interno. O `<PhaserCanvas />` passa a preencher 100% da largura e altura disponíveis (o `Phaser.Scale.RESIZE` já cuida do redimensionamento).
+- Chat continua com `h-52` fixo embaixo; sidebar direita continua igual → o mapa preenche exatamente o retângulo preto que sobrou.
 
-Refatorar `MapEditor.tsx` para operar em **buffer local**:
+**4. Personagem no meio, estilo Tibia**
+- Já usamos `cameras.main.startFollow(container, true, 0.15, 0.15)` para o player local. Vou adicionar `setZoom(2)` (já existe) + `roundPixels` + garantir que o follow acontece assim que o player local entra em `players.onAdd`. Sem room, câmera fica no spawn (item 2).
 
-- Estado novo: `draft: Map<cellKey, TileRow|null>` (null = marcado para deletar) e `dirty: boolean`.
-- `paintCell`, `eraseCell`, `fillFrom`, `pickAt` passam a mutar `draft` (não chamam `mutate` mais).
-- Render do canvas combina `byCell` (do servidor) com `draft` sobrepondo.
-- Barra superior nova com:
-  - **Salvar** (habilitado se `dirty`): envia dois lotes — `paintMapTiles` para upserts e `deleteMapTilesBulk` para deletes. Após sucesso: `invalidateQueries` + limpar `draft`.
-  - **Descartar** (limpa `draft`).
-  - Indicador "N alterações pendentes".
-- `beforeunload` warn se `dirty`.
-- Trocar Z ou layer com `dirty`: pedir confirmação (senão perde edições — draft é por-cell independente de Z, então na prática mantemos, mas Z afeta o que o usuário vê).
+## Infra (você roda na VM, fora do meu escopo)
 
-Nenhuma mudança em `map.functions.ts` do server (as ações `paintMapTiles`/`deleteMapTilesBulk` já suportam lote).
+O erro `wss://fibula.pro` provavelmente é um dos três:
+- `pm2 status` → processo `olddungeons` caiu. `pm2 restart olddungeons --update-env`.
+- Nginx não faz upgrade pra WebSocket. O bloco do `fibula.pro` precisa ter dentro do `location /`:
+  ```
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "upgrade";
+  proxy_pass http://127.0.0.1:2567;
+  ```
+- Certificado TLS ausente/expirado → `sudo certbot --nginx -d fibula.pro`.
 
-## 4. Recarga do WorldCache
+Rode `curl -i https://fibula.pro/` e cole a resposta se quiser que eu diagnostique.
 
-Após Salvar no editor, chamar `WorldCache.reload()` no game-server. Como o editor é frontend e o game-server é AWS, adicionar:
+## Arquivos alterados
 
-- Server-route público `/api/public/reload-world` (verifica header `x-reload-secret` contra `WORLD_RELOAD_SECRET`). Handler apenas faz `fetch` para o game-server (`https://fibula.pro/admin/reload`).
-- No game-server: rota HTTP simples `POST /admin/reload` protegida pelo mesmo secret que dispara `WorldCache.reload()`.
-- Alternativa mais simples se preferir: `WorldCache` já tem subscription em `map_tiles`; se estiver funcional, pular esta etapa e o mapa recarrega sozinho ao salvar. **Confirmarei olhando `game-server/src/cache/subscriptions.ts` antes de implementar; se já houver Realtime, Salvar do editor basta.**
+- `src/components/tibia/PhaserCanvas.tsx` — mapa carrega antes da conexão; overlay de erro com retry.
+- `src/components/tibia/GameViewport.tsx` — remove trava de aspecto.
+- `src/game/scenes/GameScene.ts` — `attachRoom` opcional; câmera centraliza no spawn quando sem player.
 
-## 5. Fluxo do usuário após login
+## Fora de escopo agora
 
-Já existe: `/` → `TibiaShell` → `PhaserCanvas` → `joinGameRoom`. Com (1) e (2) prontos, logar cai direto no mapa no spawn e WASD/setas movem o boneco.
-
-## Arquivos afetados
-
-- `game-server/src/rooms/GameRoom.ts` — spawn + protocolo move
-- `game-server/src/cache/WorldCache.ts` — `spawnPoint()`
-- `game-server/src/constants.ts` (novo) — TILE
-- `game-server/src/index.ts` — rota `/admin/reload` (se necessário)
-- `src/components/dev/MapEditor.tsx` — buffer + botão Salvar
-- (opcional) `src/routes/api/public/reload-world.ts`
-
-## Notas técnicas
-
-- O game-server roda na AWS; após alterar arquivos em `game-server/**` você precisa rebuild+restart lá (`pm2 restart` conforme `ecosystem.config.cjs`). Vou deixar isso claro ao final.
-- Sem mudança de schema no Supabase; usarei linhas existentes em `server_configs`.
+- Não vou mexer no game-server (spawn/movimento já foram feitos no turno anterior).
+- Não vou reescrever a sidebar/chat.
+- Não vou tocar no editor de mapa.
