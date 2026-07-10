@@ -281,7 +281,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const callbacks = getStateCallbacks(room) as StateCallbacks | undefined;
+    const callbacks = getStateCallbacks(room) as unknown as StateCallbacks | undefined;
     this.wiredRoom = room;
 
     const addPlayer = (p: PlayerLike, sessionId: string) => {
