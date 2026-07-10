@@ -17,7 +17,7 @@
  * preserve them as an opaque blob and reconstruct geometry + sprites, which
  * is what the UI needs to display and animate the object.
  */
-import LZMA from "lzma";
+import LZMA from "lzma-web";
 
 export type ObdSprite = {
   id: number;
