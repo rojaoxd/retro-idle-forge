@@ -6,13 +6,40 @@ import { Logger } from "../persistence/Logger.js";
 import { supabase } from "../supabase.js";
 
 const TILE = 32;
+const TILE_CENTER = TILE / 2;
 const STEP_MS = 450; // servidor um pouco mais permissivo que o tween do client (500ms)
 const MAP_COLS = 40;
 const MAP_ROWS = 30;
 
-const SPAWN_X = Number(process.env.SPAWN_X ?? 10);
-const SPAWN_Y = Number(process.env.SPAWN_Y ?? 10);
-const SPAWN_Z = Number(process.env.SPAWN_Z ?? 7);
+const envNumber = (value: string | undefined, fallback: number) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const SPAWN_X = envNumber(process.env.SPAWN_X, 10);
+const SPAWN_Y = envNumber(process.env.SPAWN_Y, 10);
+const SPAWN_Z = envNumber(process.env.SPAWN_Z, 7);
+
+function readFiniteNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeTile(value: unknown, fallback: number, max: number) {
+  const n = readFiniteNumber(value);
+  if (n === null) return fallback;
+  const tile = Math.trunc(n);
+  return tile >= 0 && tile < max ? tile : fallback;
+}
+
+function tileToPixel(tile: number) {
+  return tile * TILE + TILE_CENTER;
+}
+
+function pixelToTile(pixel: number) {
+  return Math.floor(pixel / TILE);
+}
 
 class Player extends Schema {
   @type("string") id = "";
@@ -41,6 +68,7 @@ const DIRS: Record<Direction, { dx: number; dy: number }> = {
 export class GameRoom extends Room<WorldState> {
   maxClients = 200;
   private lastMoveAt = new Map<string, number>();
+  private userIds = new Map<string, string>();
 
   onCreate() {
     this.setState(new WorldState());
@@ -59,24 +87,32 @@ export class GameRoom extends Room<WorldState> {
 
       // Sanidade: nunca deixa posição virar NaN. Se veio bagunçada, reseta pro spawn.
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) {
-        p.x = SPAWN_X * TILE;
-        p.y = SPAWN_Y * TILE;
+        Logger.push({
+          level: "warn",
+          source: "colyseus",
+          message: "player_position_invalid_reset",
+          meta: { session: client.sessionId, characterId: p.id, x: String(p.x), y: String(p.y) },
+        });
+        p.x = tileToPixel(SPAWN_X);
+        p.y = tileToPixel(SPAWN_Y);
       }
 
       const { dx, dy } = DIRS[dir];
-      const curTileX = Math.round(p.x / TILE);
-      const curTileY = Math.round(p.y / TILE);
+      const curTileX = pixelToTile(p.x);
+      const curTileY = pixelToTile(p.y);
       const nx = curTileX + dx;
       const ny = curTileY + dy;
       if (nx < 0 || ny < 0 || nx >= MAP_COLS || ny >= MAP_ROWS) return;
       if (WorldCache.isBlocking(nx, ny, p.z)) return;
 
-      p.x = nx * TILE;
-      p.y = ny * TILE;
+      p.x = tileToPixel(nx);
+      p.y = tileToPixel(ny);
       this.lastMoveAt.set(client.sessionId, now);
+      const userId = this.userIds.get(client.sessionId);
+      if (!userId) return;
 
       PlayerWriter.enqueue({
-        id: p.id,
+        user_id: userId,
         character_name: p.name,
         x: nx,
         y: ny,
@@ -115,21 +151,35 @@ export class GameRoom extends Room<WorldState> {
     const p = new Player();
     p.id = character.id;
     p.name = character.name;
-    const rawPosX = Number(character.pos_x);
-    const rawPosY = Number(character.pos_y);
-    const rawPosZ = Number(character.pos_z);
-    const rawHp = Number(character.hp);
-    p.x = (Number.isFinite(rawPosX) ? rawPosX : SPAWN_X) * TILE;
-    p.y = (Number.isFinite(rawPosY) ? rawPosY : SPAWN_Y) * TILE;
-    p.z = Number.isFinite(rawPosZ) ? rawPosZ : SPAWN_Z;
-    p.hp = Number.isFinite(rawHp) ? rawHp : 100;
+    this.userIds.set(client.sessionId, authData.user.id);
+    const spawnTileX = normalizeTile(character.pos_x, SPAWN_X, MAP_COLS);
+    const spawnTileY = normalizeTile(character.pos_y, SPAWN_Y, MAP_ROWS);
+    const rawPosZ = readFiniteNumber(character.pos_z);
+    const rawHp = readFiniteNumber(character.hp);
+    p.x = tileToPixel(spawnTileX);
+    p.y = tileToPixel(spawnTileY);
+    p.z = rawPosZ ?? SPAWN_Z;
+    p.hp = rawHp ?? 100;
     this.state.players.set(client.sessionId, p);
-    void supabase().from("characters").update({ last_login_at: new Date().toISOString() }).eq("id", p.id);
+    void supabase()
+      .from("characters")
+      .update({
+        pos_x: spawnTileX,
+        pos_y: spawnTileY,
+        pos_z: p.z,
+        last_login_at: new Date().toISOString(),
+      })
+      .eq("id", p.id);
     Logger.push({
       level: "info",
       source: "colyseus",
       message: `player_join ${p.name}`,
-      meta: { session: client.sessionId, characterId: p.id, spawn: { x: p.x / TILE, y: p.y / TILE, z: p.z } },
+      meta: {
+        session: client.sessionId,
+        characterId: p.id,
+        spawnTile: { x: spawnTileX, y: spawnTileY, z: p.z },
+        spawnPixel: { x: p.x, y: p.y },
+      },
     });
   }
 
@@ -137,8 +187,10 @@ export class GameRoom extends Room<WorldState> {
     const p = this.state.players.get(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.lastMoveAt.delete(client.sessionId);
+    const userId = this.userIds.get(client.sessionId);
+    this.userIds.delete(client.sessionId);
     if (p) {
-      PlayerWriter.drop(p.id);
+      if (userId) PlayerWriter.drop(userId);
       Logger.push({
         level: "info",
         source: "colyseus",

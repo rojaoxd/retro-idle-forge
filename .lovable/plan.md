@@ -1,48 +1,35 @@
-## Diagnóstico (feito agora do sandbox)
+## Objetivo
+Corrigir o problema crítico em que o personagem aparece no canto superior esquerdo, a câmera não fica centralizada nele e os movimentos ficam inconsistentes.
 
-- `https://fibula.pro` → **não resolve DNS / timeout**. O domínio não aponta para lugar nenhum acessível.
-- `http://54.207.144.3:2567/` → **responde HTTP 404** — o Colyseus **está rodando** na instância AWS (404 é normal na raiz).
-- `https://54.207.144.3:443` → **timeout** — não tem TLS/reverse-proxy escutando.
+## Plano
+1. **Unificar coordenadas em pixels no servidor e no cliente**
+   - Corrigir o spawn para usar o centro do tile (`tile * 32 + 16`) em vez do canto do tile.
+   - Garantir que o servidor nunca envie `NaN`, `undefined` ou coordenadas fora do mapa para o Colyseus.
 
-Ou seja: o servidor está no ar, mas o cliente aponta para `wss://fibula.pro` (TLS na 443) e esse endpoint não existe. O navegador, num site HTTPS publicado, **não aceita** `ws://` puro (mixed content bloqueado) — WSS com certificado válido é obrigatório.
+2. **Corrigir a lógica de movimento por tile**
+   - Calcular o tile atual a partir do centro do jogador, não pelo canto/arredondamento atual.
+   - Enviar e aplicar movimentos sempre em múltiplos corretos de 32px + centro do tile.
+   - Evitar que o cliente faça movimento otimista para uma posição diferente da que o servidor vai confirmar.
 
-## O que você precisa fazer fora do código (AWS + domínio)
+3. **Travar a câmera no jogador local**
+   - A câmera seguirá exclusivamente o container do jogador local.
+   - Ao receber o jogador local, centralizar imediatamente a tela nele.
+   - Remover o efeito de suavização/offset que pode deixar a câmera “puxada para o lado”.
 
-1. **DNS** — no seu provedor do domínio `fibula.pro`, criar um registro **A**:
-   - Nome: `@` (ou um subdomínio, ex.: `game.fibula.pro`)
-   - Valor: `54.207.144.3`
-2. **Security Group da EC2** — liberar entrada:
-   - TCP **80** (para o Let's Encrypt validar HTTP-01)
-   - TCP **443** (WSS)
-   - Manter 2567 fechada ao público (só o proxy fala com ela)
-3. **TLS reverse proxy na EC2** — instalar Caddy (mais simples) ou nginx+certbot para terminar TLS na 443 e fazer proxy para `localhost:2567` com upgrade WebSocket. Ex. Caddyfile:
-   ```
-   fibula.pro {
-     reverse_proxy localhost:2567
-   }
-   ```
-   Caddy pega o certificado automático. Se preferir um subdomínio (`game.fibula.pro`), me avise.
-4. **`.env` do game-server na EC2** — conferir se estão setados (esse é o "detalhe da Supabase" que ficou pendente):
-   - `SUPABASE_URL=https://hewxrvrqbzkggajgojid.supabase.co`
-   - `SUPABASE_SERVICE_ROLE_KEY=<service role do dashboard>` (nunca no frontend)
-   - `PORT=2567`
-   - Reiniciar o processo (pm2 restart).
-   Sem isso, o `onJoin` falha ao validar o `accessToken` e a sala rejeita a conexão mesmo com TLS funcionando.
+4. **Corrigir fallback visual**
+   - O personagem temporário não deve competir com o personagem real.
+   - Quando o estado real do Colyseus chegar, o fallback será removido e a câmera passará para o player real.
 
-## O que eu vou mudar no código (quando você aprovar)
+5. **Adicionar logs úteis e seguros para confirmar no EC2**
+   - Logar posição inicial do player como tile e pixel.
+   - Logar reset automático quando qualquer coordenada inválida for detectada.
+   - Ajustar o `PlayerWriter` para não tentar persistir IDs inválidos nem posições inválidas, evitando os erros `invalid input syntax for type uuid` e `trying to encode "NaN"`.
 
-Muito pouco — o cliente já está correto apontando para `wss://fibula.pro`. Só ajustes de robustez/DX:
+## Resultado esperado
+- O personagem nasce visível e centralizado.
+- A tela/câmera acompanha o personagem imediatamente.
+- WASD e setas movem nas direções corretas.
+- Os logs do EC2 param de mostrar `NaN` e `invalid input syntax for type uuid` durante movimento normal.
 
-1. **`src/net/colyseus.ts`** — melhorar a mensagem de erro para distinguir "servidor offline / DNS" de "sessão inválida" (hoje engole tudo como "Servidor do jogo indisponível"), logando o erro real no console pra debug.
-2. **`game-server/README.md`** — adicionar seção curta "Setup DNS + TLS (Caddy)" com o Caddyfile acima e o checklist de Security Group, para não perder da próxima vez.
-3. **`game-server/.env.example`** — já está OK, só confirmar que reflete o que precisa estar na EC2.
-
-## Fora de escopo
-
-- Não vou trocar `wss://fibula.pro` por IP direto — não funciona em site HTTPS.
-- Não vou mexer no fluxo de auth, personagens, mapa ou Phaser.
-- O erro de hydration em `/auth` que aparece nos logs é separado; posso tratar depois se quiser.
-
-## Próximo passo
-
-Confirma que vai configurar DNS + Caddy + `.env` na EC2? Se sim, aprovo o plano e faço as mudanças pequenas do cliente + docs. Se preferir subdomínio (`game.fibula.pro`) em vez do apex, me diga antes.
+## Depois da implementação
+Você ainda precisará reenviar a versão nova para o EC2/reiniciar o PM2, porque parte do bug está no servidor Colyseus rodando na AWS.
