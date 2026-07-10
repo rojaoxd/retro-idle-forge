@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      characters: {
+        Row: {
+          cap: number
+          created_at: string
+          experience: number
+          hp: number
+          hp_max: number
+          id: string
+          last_login_at: string | null
+          level: number
+          mana: number
+          mana_max: number
+          name: string
+          pos_x: number
+          pos_y: number
+          pos_z: number
+          speed: number
+          updated_at: string
+          user_id: string
+          vocation: Database["public"]["Enums"]["vocation_type"]
+        }
+        Insert: {
+          cap?: number
+          created_at?: string
+          experience?: number
+          hp?: number
+          hp_max?: number
+          id?: string
+          last_login_at?: string | null
+          level?: number
+          mana?: number
+          mana_max?: number
+          name: string
+          pos_x?: number
+          pos_y?: number
+          pos_z?: number
+          speed?: number
+          updated_at?: string
+          user_id: string
+          vocation?: Database["public"]["Enums"]["vocation_type"]
+        }
+        Update: {
+          cap?: number
+          created_at?: string
+          experience?: number
+          hp?: number
+          hp_max?: number
+          id?: string
+          last_login_at?: string | null
+          level?: number
+          mana?: number
+          mana_max?: number
+          name?: string
+          pos_x?: number
+          pos_y?: number
+          pos_z?: number
+          speed?: number
+          updated_at?: string
+          user_id?: string
+          vocation?: Database["public"]["Enums"]["vocation_type"]
+        }
+        Relationships: []
+      }
       game_config: {
         Row: {
           config: Json
@@ -991,6 +1054,36 @@ export type Database = {
         }
         Relationships: []
       }
+      vocations_catalog: {
+        Row: {
+          cap_base: number
+          created_at: string
+          description: string
+          hp_base: number
+          id: Database["public"]["Enums"]["vocation_type"]
+          label: string
+          mana_base: number
+        }
+        Insert: {
+          cap_base?: number
+          created_at?: string
+          description: string
+          hp_base?: number
+          id: Database["public"]["Enums"]["vocation_type"]
+          label: string
+          mana_base?: number
+        }
+        Update: {
+          cap_base?: number
+          created_at?: string
+          description?: string
+          hp_base?: number
+          id?: Database["public"]["Enums"]["vocation_type"]
+          label?: string
+          mana_base?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1006,6 +1099,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
+      vocation_type: "none" | "knight" | "paladin" | "sorcerer" | "druid"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1134,6 +1228,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],
+      vocation_type: ["none", "knight", "paladin", "sorcerer", "druid"],
     },
   },
 } as const
