@@ -140,6 +140,11 @@ function ObjectsPage() {
         <Button size="sm" variant="secondary" onClick={() => setImportOpen("obd")}>
           <FileUp className="mr-1 h-4 w-4" /> Import .obd
         </Button>
+        <Link to="/dev/objects/import-client">
+          <Button size="sm" style={{ background: "var(--dev-accent)", color: "#052e2b" }}>
+            <FileUp className="mr-1 h-4 w-4" /> Tibia 7.4 (.dat+.spr)
+          </Button>
+        </Link>
       </div>
 
       {/* Category tabs */}
