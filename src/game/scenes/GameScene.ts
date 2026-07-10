@@ -179,7 +179,8 @@ export class GameScene extends Phaser.Scene {
 
     container.add([shadow, body, head, label]);
     this.fallbackPlayer = container;
-    this.cameras.main.startFollow(container, true, 0.15, 0.15);
+    this.cameras.main.startFollow(container, true, 1, 1);
+    this.cameras.main.centerOn(x, y);
   }
 
   private async loadWorldFromDB() {
