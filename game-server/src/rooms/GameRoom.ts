@@ -57,6 +57,12 @@ export class GameRoom extends Room<WorldState> {
       const last = this.lastMoveAt.get(client.sessionId) ?? 0;
       if (now - last < STEP_MS) return;
 
+      // Sanidade: nunca deixa posição virar NaN. Se veio bagunçada, reseta pro spawn.
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+        p.x = SPAWN_X * TILE;
+        p.y = SPAWN_Y * TILE;
+      }
+
       const { dx, dy } = DIRS[dir];
       const curTileX = Math.round(p.x / TILE);
       const curTileY = Math.round(p.y / TILE);
