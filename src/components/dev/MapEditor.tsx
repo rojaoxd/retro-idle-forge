@@ -19,8 +19,9 @@ import {
 } from "@/components/ui/select";
 import {
   Skull, Brush, Eraser, PaintBucket, Pipette,
-  ChevronUp, ChevronDown, Layers,
+  ChevronUp, ChevronDown, Layers, Save, Undo2,
 } from "lucide-react";
+import { toast } from "sonner";
 
 const TILE = 32;
 const COLS = 40;
