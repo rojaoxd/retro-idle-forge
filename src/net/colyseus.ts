@@ -1,6 +1,6 @@
 import { Client, Room } from "colyseus.js";
 
-export const COLYSEUS_ENDPOINT = "ws://54.233.23.67:2567";
+export const COLYSEUS_ENDPOINT = import.meta.env.VITE_COLYSEUS_URL || "ws://localhost:2567";
 export const ROOM_NAME = "game";
 
 let client: Client | null = null;
