@@ -113,21 +113,24 @@ type ItemRow = {
 
 function readItemProps(r: Reader, endPos: number): Omit<ItemRow, "id"> {
   const out: any = {};
-  while (r.pos < endPos) {
-    const attr = r.u8();
-    switch (attr) {
-      case ATTR_COUNT:        out.count = r.u8(); break;
-      case ATTR_ACTION_ID:    out.aid = r.u16(); break;
-      case ATTR_UNIQUE_ID:    out.uid = r.u16(); break;
-      case ATTR_TEXT:         out.text = r.str(); break;
-      case ATTR_TELE_DEST:    out.dest = { x: r.u16(), y: r.u16(), z: r.u8() }; break;
-      case ATTR_DEPOT_ID:     out.depot = r.u16(); break;
-      case ATTR_RUNE_CHARGES: out.charges = r.u8(); break;
-      case ATTR_HOUSEDOORID:  out.door = r.u8(); break;
-      default:
-        // unknown attr — bail (avoid running off the props buffer)
-        r.pos = endPos; return out;
+  try {
+    while (r.pos < endPos) {
+      const attr = r.u8();
+      switch (attr) {
+        case ATTR_COUNT:        out.count = r.u8(); break;
+        case ATTR_ACTION_ID:    out.aid = r.u16(); break;
+        case ATTR_UNIQUE_ID:    out.uid = r.u16(); break;
+        case ATTR_TEXT:         out.text = r.str(); break;
+        case ATTR_TELE_DEST:    out.dest = { x: r.u16(), y: r.u16(), z: r.u8() }; break;
+        case ATTR_DEPOT_ID:     out.depot = r.u16(); break;
+        case ATTR_RUNE_CHARGES: out.charges = r.u8(); break;
+        case ATTR_HOUSEDOORID:  out.door = r.u8(); break;
+        default:
+          return out; // unknown attr, stop
+      }
     }
+  } catch {
+    // truncated/garbled props — return what we got
   }
   return out;
 }
