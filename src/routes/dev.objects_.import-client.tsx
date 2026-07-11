@@ -69,11 +69,10 @@ function Page() {
 
   useEffect(() => { refreshList(); }, [refreshList]);
 
-  // ---- polling loop --------------------------------------------------------
   const stopPolling = useCallback(() => {
     runningRef.current = false;
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, []);
+
 
   const startPolling = useCallback((jobId: string) => {
     if (runningRef.current) return;
