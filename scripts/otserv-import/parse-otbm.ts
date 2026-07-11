@@ -132,37 +132,21 @@ function readItemProps(r: Reader, endPos: number): Omit<ItemRow, "id"> {
   return out;
 }
 
-function readItem(rSrc: Reader, span: { type: number; propsEnd: number; childrenStart: number; nodeEnd: number }): ItemRow {
-  // Props are between (start of node body + 1 [type byte]) .. propsEnd. But we already consumed type.
-  const propsBuf = unescape(rSrc.buf, rSrc.pos, span.propsEnd);
+/** Reads an item node whose body begins at `bodyStart` (byte AFTER type byte). */
+function readItemAt(
+  buf: Buffer,
+  bodyStart: number,
+  span: { propsEnd: number; childrenStart: number; nodeEnd: number },
+): ItemRow {
+  const propsBuf = unescape(buf, bodyStart, span.propsEnd);
   const pr = new Reader(propsBuf);
   const id = pr.u16();
   const rest = readItemProps(pr, propsBuf.length);
   const item: ItemRow = { id, ...rest };
-  // children = contained items
-  let cp = span.childrenStart;
-  while (cp < span.nodeEnd - 1) {
-    if (rSrc.buf[cp] === NODE_START) {
-      cp++;
-      const child = new Reader(rSrc.buf);
-      child.pos = cp;
-      const cSpan = enterNode(child);
-      if (cSpan.type === OTBM_ITEM) {
-        // recursion
-        const savedPos = child.pos;
-        child.pos = savedPos; // enterNode consumed only type byte from a temp; redo
-        // simpler: build a mini reader positioned right after type byte
-        const mini = new Reader(rSrc.buf);
-        mini.pos = cp + 1; // skip type byte
-        const itemSpan = { type: OTBM_ITEM, propsEnd: cSpan.propsEnd, childrenStart: cSpan.childrenStart, nodeEnd: cSpan.nodeEnd };
-        const sub = readItem(mini, itemSpan);
-        (item.contents ||= []).push(sub);
-      }
-      cp = cSpan.nodeEnd;
-    } else {
-      cp++;
-    }
-  }
+  walkChildren(buf, span.childrenStart, span.nodeEnd, (childBodyStart, cSpan) => {
+    if (cSpan.type !== OTBM_ITEM) return;
+    (item.contents ||= []).push(readItemAt(buf, childBodyStart, cSpan));
+  });
   return item;
 }
 
