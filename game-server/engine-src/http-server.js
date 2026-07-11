@@ -173,11 +173,12 @@ HTTPServer.prototype.__validateHTTPRequest = function(request) {
 
 }
 
-HTTPServer.prototype.__handleUpgrade = function(request, socket, head) {
+HTTPServer.prototype.__handleUpgrade = async function(request, socket, head) {
 
   /*
    * Function HTTPServer.__handleUpgrade
-   * Handles upgrading of the websocket and checks the token from the login server. Only valid tokens are upgraded.
+   * Handles upgrading of the websocket. Substituído para validar JWT do
+   * Supabase (async). O cliente envia `?token=<jwt>&characterId=<uuid>`.
    */
 
   // Validation of request
@@ -187,24 +188,25 @@ HTTPServer.prototype.__handleUpgrade = function(request, socket, head) {
     return this.__generateRawHTTPResponse(socket, code)
   }
 
-  // Get the token from the URL 
+  // Get the token from the URL
   let query = url.parse(request.url, true).query;
 
-  // The login token must be present
-  if(!Object.prototype.hasOwnProperty.call(query, "token")) {
+  // O token JWT e o characterId precisam estar presentes
+  if(!Object.prototype.hasOwnProperty.call(query, "token") ||
+     !Object.prototype.hasOwnProperty.call(query, "characterId")) {
     return this.__generateRawHTTPResponse(socket, 400);
   }
 
-  // Authenticate the token
-  let accountName = this.authService.authenticate(query.token);
+  // Authenticate the JWT (async)
+  let session = await this.authService.authenticate(query.token, query.characterId);
 
   // Token was not valid: destroy the connection manually
-  if(accountName === null) {
+  if(session === null) {
     return this.__generateRawHTTPResponse(socket, 401);
   }
 
-  // Upgrade the HTTP request to the websocket server
-  this.websocketServer.upgrade(request, socket, head, accountName);
+  // Upgrade the HTTP request to the websocket server (passa a sessão inteira)
+  this.websocketServer.upgrade(request, socket, head, session);
 
 }
 
