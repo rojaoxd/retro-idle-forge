@@ -110,8 +110,6 @@ function CharactersPage() {
   );
 }
 
-function vocationLabel(v: string) {
-  return (
-    { none: "Sem vocação", knight: "Knight", paladin: "Paladin", sorcerer: "Sorcerer", druid: "Druid" } as Record<string, string>
-  )[v] ?? v;
+function vocationLabel(v: number) {
+  return (["Sem vocação", "Sorcerer", "Druid", "Paladin", "Knight"] as const)[v] ?? "Sem vocação";
 }
