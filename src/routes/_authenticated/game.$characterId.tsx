@@ -1,7 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { TibiaShell } from "@/components/tibia/TibiaShell";
-import { useGameSessionStore } from "@/stores/gameSessionStore";
 
 export const Route = createFileRoute("/_authenticated/game/$characterId")({
   head: () => ({
@@ -10,21 +8,18 @@ export const Route = createFileRoute("/_authenticated/game/$characterId")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: GamePage,
+  component: GameRedirect,
 });
 
-function GamePage() {
+/**
+ * Rota mantida por compatibilidade — hoje só redireciona para /play/$characterId.
+ * Volta a ser útil quando o cliente Canvas 2D do engine for portado (fase §4).
+ */
+function GameRedirect() {
   const { characterId } = Route.useParams();
   const navigate = useNavigate();
-  const character = useGameSessionStore((s) => s.character);
-  const room = useGameSessionStore((s) => s.room);
-
   useEffect(() => {
-    if (!character || !room || character.id !== characterId) {
-      navigate({ to: "/play/$characterId", params: { characterId }, replace: true });
-    }
-  }, [character, room, characterId, navigate]);
-
-  if (!character || !room) return null;
-  return <TibiaShell />;
+    navigate({ to: "/play/$characterId", params: { characterId }, replace: true });
+  }, [characterId, navigate]);
+  return null;
 }

@@ -21,6 +21,7 @@ export type Database = {
           created_at: string
           depot: Json
           direction: number
+          engine_data: Json
           experience: number
           friends: Json
           health: number
@@ -52,6 +53,7 @@ export type Database = {
           created_at?: string
           depot?: Json
           direction?: number
+          engine_data?: Json
           experience?: number
           friends?: Json
           health?: number
@@ -83,6 +85,7 @@ export type Database = {
           created_at?: string
           depot?: Json
           direction?: number
+          engine_data?: Json
           experience?: number
           friends?: Json
           health?: number

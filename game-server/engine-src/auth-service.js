@@ -1,97 +1,69 @@
 "use strict";
 
-const { createHmac } = require("crypto");
+/*
+ * auth-service.js  —  substituto do HMAC-token original.
+ *
+ * Valida tokens JWT emitidos pelo Supabase Auth (mesmo projeto que o site
+ * usa). O cliente abre o WebSocket em `ws://host:2222/?token=<jwt>&characterId=<uuid>`
+ * e este serviço:
+ *   1. verifica a assinatura via JWKS remoto (cache automático via `jose`),
+ *   2. retorna o `characterId` que a WS deve carregar, ou `null` se inválido.
+ *
+ * A interface original era síncrona (`authenticate(token) → name|null`).
+ * Como o JWT precisa de I/O para validar, expomos AGORA como async — o
+ * http-server foi patchado para `await` no upgrade.
+ */
+
+const { createRemoteJWKSet, jwtVerify } = require("jose");
 
 const AuthService = function() {
 
-
-  /*
-   * Class AuthService
-   * Service responsible for player authentication
-   *
-   * API:
-   *
-   * AuthService.authenticate(token) - returns the name of the account to load if the token is valid
-   *
-   */
-
-  if(CONFIG.HMAC.SHARED_SECRET === "0000000000000000000000000000000000000000000000000000000000000000") {
-    console.warn("The default HMAC secret is used. This is a security vulnerability in production environments.");
+  const jwksUrl = process.env[CONFIG.SUPABASE.JWKS_URL_ENV];
+  if(!jwksUrl) {
+    throw new Error("Missing env " + CONFIG.SUPABASE.JWKS_URL_ENV);
   }
 
-}
+  this.jwks = createRemoteJWKSet(new URL(jwksUrl));
+  this.issuer = jwksUrl.replace(/\/auth\/v1\/\.well-known\/jwks\.json$/, "/auth/v1");
+  console.log("AuthService: JWKS at %s", jwksUrl);
 
-AuthService.prototype.authenticate = function(token) {
-  
+};
+
+AuthService.prototype.authenticate = async function(token, characterId) {
+
   /*
    * Function AuthService.authenticate
-   * Authentictes a client request with a token
+   * Valida um JWT do Supabase e devolve o payload de sessão pronto para
+   * o WebsocketServer carregar do banco.
+   *
+   * Retorna: { userId, characterId } | null
    */
 
-  // Get the payload from the request
-  let payload = this.__parseToken(token);
-
-  // Could not parse payload
-  if(payload === null) {
+  if(!token || !characterId) {
     return null;
   }
 
-  // Could not verify token: it was tampered with or not signed by our login server via the shared HMAC secret
-  if(!this.__verifyLoginToken(payload)) {
-    return null;
-  }
-
-  // The token is valid but has expired
-  if(payload.expire <= Date.now()) {
-    return null;
-  }
-
-  // Token was verified and succesfully return the name of the account to be loaded
-  return payload.name;
-
-}
-
-AuthService.prototype.__parseToken = function(token) {
-
-  /*
-   * Function AuthService.__parseToken
-   * Attempt to parse the HMAC token to JSON
-   */
-
-  let string = Buffer.from(token, "base64").toString();
-
-  // Wrap token extraction in a try/catch
   try {
-    return JSON.parse(string);
-  } catch(exception) {
+    const { payload } = await jwtVerify(token, this.jwks, {
+      // Supabase Auth assina como issuer <projeto>/auth/v1
+      issuer: this.issuer,
+    });
+
+    if(!payload.sub) {
+      return null;
+    }
+
+    return {
+      userId: payload.sub,
+      characterId: characterId,
+      email: payload.email || null,
+    };
+
+  } catch(error) {
+    console.warn("AuthService: token rejeitado —", error.message);
     return null;
   }
 
-}
-
-AuthService.prototype.__verifyLoginToken = function(payload) {
-
-  /*
-   * Function AuthService.__verifyLoginToken
-   * Verifies the passed HMAC token and check that it was signed by the login server
-   */
-
-  // Validate the object
-  if(payload === null || typeof payload !== "object") {
-    return false;
-  }
-
-  // Requires properties
-  if(!payload.hasOwnProperty("name") || !payload.hasOwnProperty("expire") || !payload.hasOwnProperty("hmac")) {
-    return false;
-  }
-
-  // Expected signature
-  let hmac = createHmac("sha256", CONFIG.HMAC.SHARED_SECRET).update(payload.name + payload.expire).digest("hex");
-
-  // Confirm the HMAC signature
-  return payload.hmac === hmac;
-
-}
+};
 
 module.exports = AuthService;

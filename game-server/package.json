@@ -1,0 +1,25 @@
+{
+  "name": "olddungeons-game-server",
+  "version": "0.2.0",
+  "private": true,
+  "description": "OldDungeons game server — fork do Tibia74-JS-Engine com auth Supabase.",
+  "main": "engine.js",
+  "scripts": {
+    "start": "node engine.js",
+    "dev": "node engine.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.5",
+    "jose": "^5.9.6",
+    "jsonschema": "^1.4.1",
+    "ws": "^8.14.2",
+    "xml2js": "^0.4.23"
+  },
+  "optionalDependencies": {
+    "bufferutil": "^4.0.8"
+  }
+}
