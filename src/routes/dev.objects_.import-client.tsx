@@ -78,26 +78,27 @@ function Page() {
   const startPolling = useCallback((jobId: string) => {
     if (runningRef.current) return;
     runningRef.current = true;
-    const tick = async () => {
-      try {
-        const res = await processFn({ data: { jobId, batchSize } });
-        // refresh authoritative row
-        const { job } = await getJobFn({ data: { jobId } });
-        if (job) setActiveJob(job as JobRow);
-        if (res.status === "completed" || (job && (job.status === "paused" || job.status === "failed" || job.status === "completed"))) {
-          stopPolling();
+    const loop = async () => {
+      while (runningRef.current) {
+        try {
+          const res = await processFn({ data: { jobId, batchSize } });
+          const { job } = await getJobFn({ data: { jobId } });
+          if (job) setActiveJob(job as JobRow);
+          const done = res.status === "completed"
+            || (job && (job.status === "paused" || job.status === "failed" || job.status === "completed"));
+          if (done) { runningRef.current = false; await refreshList(); break; }
+          // brief breath so UI can paint & user can pause
+          await new Promise((r) => setTimeout(r, 200));
+        } catch (e: any) {
+          setError(e.message);
+          runningRef.current = false;
           await refreshList();
+          break;
         }
-      } catch (e: any) {
-        setError(e.message);
-        stopPolling();
-        await refreshList();
       }
     };
-    // fire immediately then interval
-    tick();
-    pollRef.current = window.setInterval(tick, 1200);
-  }, [processFn, getJobFn, batchSize, refreshList, stopPolling]);
+    void loop();
+  }, [processFn, getJobFn, batchSize, refreshList]);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
