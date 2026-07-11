@@ -1,6 +1,9 @@
 const path = require("path");
 
-global.CONFIG = require("./config");
+// Suporte a .env local (dotenv/config carregado por PM2/node --require)
+try { require("dotenv/config"); } catch (_) { /* opcional */ }
+
+global.CONFIG = require("./config.json");
 
 // Create some useful global functions
 global.getDataFile = function() {
