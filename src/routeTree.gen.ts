@@ -14,22 +14,8 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DevIndexRouteImport } from './routes/dev.index'
-import { Route as DevVocationsRouteImport } from './routes/dev.vocations'
-import { Route as DevSpritesRouteImport } from './routes/dev.sprites'
-import { Route as DevSpellsRouteImport } from './routes/dev.spells'
-import { Route as DevScriptsRouteImport } from './routes/dev.scripts'
-import { Route as DevPalettesRouteImport } from './routes/dev.palettes'
 import { Route as DevOverviewRouteImport } from './routes/dev.overview'
-import { Route as DevObjectsRouteImport } from './routes/dev.objects'
-import { Route as DevNpcsRouteImport } from './routes/dev.npcs'
-import { Route as DevMonstersRouteImport } from './routes/dev.monsters'
-import { Route as DevMapRouteImport } from './routes/dev.map'
-import { Route as DevItemsRouteImport } from './routes/dev.items'
-import { Route as DevImportRouteImport } from './routes/dev.import'
-import { Route as DevCreaturesRouteImport } from './routes/dev.creatures'
-import { Route as DevConfigRouteImport } from './routes/dev.config'
 import { Route as AuthenticatedCharactersIndexRouteImport } from './routes/_authenticated/characters.index'
-import { Route as DevObjectsImportClientRouteImport } from './routes/dev.objects_.import-client'
 import { Route as AuthenticatedPlayCharacterIdRouteImport } from './routes/_authenticated/play.$characterId'
 import { Route as AuthenticatedGameCharacterIdRouteImport } from './routes/_authenticated/game.$characterId'
 import { Route as AuthenticatedCharactersNewRouteImport } from './routes/_authenticated/characters.new'
@@ -58,74 +44,9 @@ const DevIndexRoute = DevIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DevRoute,
 } as any)
-const DevVocationsRoute = DevVocationsRouteImport.update({
-  id: '/vocations',
-  path: '/vocations',
-  getParentRoute: () => DevRoute,
-} as any)
-const DevSpritesRoute = DevSpritesRouteImport.update({
-  id: '/sprites',
-  path: '/sprites',
-  getParentRoute: () => DevRoute,
-} as any)
-const DevSpellsRoute = DevSpellsRouteImport.update({
-  id: '/spells',
-  path: '/spells',
-  getParentRoute: () => DevRoute,
-} as any)
-const DevScriptsRoute = DevScriptsRouteImport.update({
-  id: '/scripts',
-  path: '/scripts',
-  getParentRoute: () => DevRoute,
-} as any)
-const DevPalettesRoute = DevPalettesRouteImport.update({
-  id: '/palettes',
-  path: '/palettes',
-  getParentRoute: () => DevRoute,
-} as any)
 const DevOverviewRoute = DevOverviewRouteImport.update({
   id: '/overview',
   path: '/overview',
-  getParentRoute: () => DevRoute,
-} as any)
-const DevObjectsRoute = DevObjectsRouteImport.update({
-  id: '/objects',
-  path: '/objects',
-  getParentRoute: () => DevRoute,
-} as any)
-const DevNpcsRoute = DevNpcsRouteImport.update({
-  id: '/npcs',
-  path: '/npcs',
-  getParentRoute: () => DevRoute,
-} as any)
-const DevMonstersRoute = DevMonstersRouteImport.update({
-  id: '/monsters',
-  path: '/monsters',
-  getParentRoute: () => DevRoute,
-} as any)
-const DevMapRoute = DevMapRouteImport.update({
-  id: '/map',
-  path: '/map',
-  getParentRoute: () => DevRoute,
-} as any)
-const DevItemsRoute = DevItemsRouteImport.update({
-  id: '/items',
-  path: '/items',
-  getParentRoute: () => DevRoute,
-} as any)
-const DevImportRoute = DevImportRouteImport.update({
-  id: '/import',
-  path: '/import',
-  getParentRoute: () => DevRoute,
-} as any)
-const DevCreaturesRoute = DevCreaturesRouteImport.update({
-  id: '/creatures',
-  path: '/creatures',
-  getParentRoute: () => DevRoute,
-} as any)
-const DevConfigRoute = DevConfigRouteImport.update({
-  id: '/config',
-  path: '/config',
   getParentRoute: () => DevRoute,
 } as any)
 const AuthenticatedCharactersIndexRoute =
@@ -134,11 +55,6 @@ const AuthenticatedCharactersIndexRoute =
     path: '/characters/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const DevObjectsImportClientRoute = DevObjectsImportClientRouteImport.update({
-  id: '/objects_/import-client',
-  path: '/objects/import-client',
-  getParentRoute: () => DevRoute,
-} as any)
 const AuthenticatedPlayCharacterIdRoute =
   AuthenticatedPlayCharacterIdRouteImport.update({
     id: '/play/$characterId',
@@ -162,49 +78,21 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dev': typeof DevRouteWithChildren
-  '/dev/config': typeof DevConfigRoute
-  '/dev/creatures': typeof DevCreaturesRoute
-  '/dev/import': typeof DevImportRoute
-  '/dev/items': typeof DevItemsRoute
-  '/dev/map': typeof DevMapRoute
-  '/dev/monsters': typeof DevMonstersRoute
-  '/dev/npcs': typeof DevNpcsRoute
-  '/dev/objects': typeof DevObjectsRoute
   '/dev/overview': typeof DevOverviewRoute
-  '/dev/palettes': typeof DevPalettesRoute
-  '/dev/scripts': typeof DevScriptsRoute
-  '/dev/spells': typeof DevSpellsRoute
-  '/dev/sprites': typeof DevSpritesRoute
-  '/dev/vocations': typeof DevVocationsRoute
   '/dev/': typeof DevIndexRoute
   '/characters/new': typeof AuthenticatedCharactersNewRoute
   '/game/$characterId': typeof AuthenticatedGameCharacterIdRoute
   '/play/$characterId': typeof AuthenticatedPlayCharacterIdRoute
-  '/dev/objects/import-client': typeof DevObjectsImportClientRoute
   '/characters/': typeof AuthenticatedCharactersIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/dev/config': typeof DevConfigRoute
-  '/dev/creatures': typeof DevCreaturesRoute
-  '/dev/import': typeof DevImportRoute
-  '/dev/items': typeof DevItemsRoute
-  '/dev/map': typeof DevMapRoute
-  '/dev/monsters': typeof DevMonstersRoute
-  '/dev/npcs': typeof DevNpcsRoute
-  '/dev/objects': typeof DevObjectsRoute
   '/dev/overview': typeof DevOverviewRoute
-  '/dev/palettes': typeof DevPalettesRoute
-  '/dev/scripts': typeof DevScriptsRoute
-  '/dev/spells': typeof DevSpellsRoute
-  '/dev/sprites': typeof DevSpritesRoute
-  '/dev/vocations': typeof DevVocationsRoute
   '/dev': typeof DevIndexRoute
   '/characters/new': typeof AuthenticatedCharactersNewRoute
   '/game/$characterId': typeof AuthenticatedGameCharacterIdRoute
   '/play/$characterId': typeof AuthenticatedPlayCharacterIdRoute
-  '/dev/objects/import-client': typeof DevObjectsImportClientRoute
   '/characters': typeof AuthenticatedCharactersIndexRoute
 }
 export interface FileRoutesById {
@@ -213,25 +101,11 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/dev': typeof DevRouteWithChildren
-  '/dev/config': typeof DevConfigRoute
-  '/dev/creatures': typeof DevCreaturesRoute
-  '/dev/import': typeof DevImportRoute
-  '/dev/items': typeof DevItemsRoute
-  '/dev/map': typeof DevMapRoute
-  '/dev/monsters': typeof DevMonstersRoute
-  '/dev/npcs': typeof DevNpcsRoute
-  '/dev/objects': typeof DevObjectsRoute
   '/dev/overview': typeof DevOverviewRoute
-  '/dev/palettes': typeof DevPalettesRoute
-  '/dev/scripts': typeof DevScriptsRoute
-  '/dev/spells': typeof DevSpellsRoute
-  '/dev/sprites': typeof DevSpritesRoute
-  '/dev/vocations': typeof DevVocationsRoute
   '/dev/': typeof DevIndexRoute
   '/_authenticated/characters/new': typeof AuthenticatedCharactersNewRoute
   '/_authenticated/game/$characterId': typeof AuthenticatedGameCharacterIdRoute
   '/_authenticated/play/$characterId': typeof AuthenticatedPlayCharacterIdRoute
-  '/dev/objects_/import-client': typeof DevObjectsImportClientRoute
   '/_authenticated/characters/': typeof AuthenticatedCharactersIndexRoute
 }
 export interface FileRouteTypes {
@@ -240,49 +114,21 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/dev'
-    | '/dev/config'
-    | '/dev/creatures'
-    | '/dev/import'
-    | '/dev/items'
-    | '/dev/map'
-    | '/dev/monsters'
-    | '/dev/npcs'
-    | '/dev/objects'
     | '/dev/overview'
-    | '/dev/palettes'
-    | '/dev/scripts'
-    | '/dev/spells'
-    | '/dev/sprites'
-    | '/dev/vocations'
     | '/dev/'
     | '/characters/new'
     | '/game/$characterId'
     | '/play/$characterId'
-    | '/dev/objects/import-client'
     | '/characters/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
-    | '/dev/config'
-    | '/dev/creatures'
-    | '/dev/import'
-    | '/dev/items'
-    | '/dev/map'
-    | '/dev/monsters'
-    | '/dev/npcs'
-    | '/dev/objects'
     | '/dev/overview'
-    | '/dev/palettes'
-    | '/dev/scripts'
-    | '/dev/spells'
-    | '/dev/sprites'
-    | '/dev/vocations'
     | '/dev'
     | '/characters/new'
     | '/game/$characterId'
     | '/play/$characterId'
-    | '/dev/objects/import-client'
     | '/characters'
   id:
     | '__root__'
@@ -290,25 +136,11 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/dev'
-    | '/dev/config'
-    | '/dev/creatures'
-    | '/dev/import'
-    | '/dev/items'
-    | '/dev/map'
-    | '/dev/monsters'
-    | '/dev/npcs'
-    | '/dev/objects'
     | '/dev/overview'
-    | '/dev/palettes'
-    | '/dev/scripts'
-    | '/dev/spells'
-    | '/dev/sprites'
-    | '/dev/vocations'
     | '/dev/'
     | '/_authenticated/characters/new'
     | '/_authenticated/game/$characterId'
     | '/_authenticated/play/$characterId'
-    | '/dev/objects_/import-client'
     | '/_authenticated/characters/'
   fileRoutesById: FileRoutesById
 }
@@ -356,102 +188,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevIndexRouteImport
       parentRoute: typeof DevRoute
     }
-    '/dev/vocations': {
-      id: '/dev/vocations'
-      path: '/vocations'
-      fullPath: '/dev/vocations'
-      preLoaderRoute: typeof DevVocationsRouteImport
-      parentRoute: typeof DevRoute
-    }
-    '/dev/sprites': {
-      id: '/dev/sprites'
-      path: '/sprites'
-      fullPath: '/dev/sprites'
-      preLoaderRoute: typeof DevSpritesRouteImport
-      parentRoute: typeof DevRoute
-    }
-    '/dev/spells': {
-      id: '/dev/spells'
-      path: '/spells'
-      fullPath: '/dev/spells'
-      preLoaderRoute: typeof DevSpellsRouteImport
-      parentRoute: typeof DevRoute
-    }
-    '/dev/scripts': {
-      id: '/dev/scripts'
-      path: '/scripts'
-      fullPath: '/dev/scripts'
-      preLoaderRoute: typeof DevScriptsRouteImport
-      parentRoute: typeof DevRoute
-    }
-    '/dev/palettes': {
-      id: '/dev/palettes'
-      path: '/palettes'
-      fullPath: '/dev/palettes'
-      preLoaderRoute: typeof DevPalettesRouteImport
-      parentRoute: typeof DevRoute
-    }
     '/dev/overview': {
       id: '/dev/overview'
       path: '/overview'
       fullPath: '/dev/overview'
       preLoaderRoute: typeof DevOverviewRouteImport
-      parentRoute: typeof DevRoute
-    }
-    '/dev/objects': {
-      id: '/dev/objects'
-      path: '/objects'
-      fullPath: '/dev/objects'
-      preLoaderRoute: typeof DevObjectsRouteImport
-      parentRoute: typeof DevRoute
-    }
-    '/dev/npcs': {
-      id: '/dev/npcs'
-      path: '/npcs'
-      fullPath: '/dev/npcs'
-      preLoaderRoute: typeof DevNpcsRouteImport
-      parentRoute: typeof DevRoute
-    }
-    '/dev/monsters': {
-      id: '/dev/monsters'
-      path: '/monsters'
-      fullPath: '/dev/monsters'
-      preLoaderRoute: typeof DevMonstersRouteImport
-      parentRoute: typeof DevRoute
-    }
-    '/dev/map': {
-      id: '/dev/map'
-      path: '/map'
-      fullPath: '/dev/map'
-      preLoaderRoute: typeof DevMapRouteImport
-      parentRoute: typeof DevRoute
-    }
-    '/dev/items': {
-      id: '/dev/items'
-      path: '/items'
-      fullPath: '/dev/items'
-      preLoaderRoute: typeof DevItemsRouteImport
-      parentRoute: typeof DevRoute
-    }
-    '/dev/import': {
-      id: '/dev/import'
-      path: '/import'
-      fullPath: '/dev/import'
-      preLoaderRoute: typeof DevImportRouteImport
-      parentRoute: typeof DevRoute
-    }
-    '/dev/creatures': {
-      id: '/dev/creatures'
-      path: '/creatures'
-      fullPath: '/dev/creatures'
-      preLoaderRoute: typeof DevCreaturesRouteImport
-      parentRoute: typeof DevRoute
-    }
-    '/dev/config': {
-      id: '/dev/config'
-      path: '/config'
-      fullPath: '/dev/config'
-      preLoaderRoute: typeof DevConfigRouteImport
       parentRoute: typeof DevRoute
     }
     '/_authenticated/characters/': {
@@ -460,13 +201,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/characters/'
       preLoaderRoute: typeof AuthenticatedCharactersIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/dev/objects_/import-client': {
-      id: '/dev/objects_/import-client'
-      path: '/objects/import-client'
-      fullPath: '/dev/objects/import-client'
-      preLoaderRoute: typeof DevObjectsImportClientRouteImport
-      parentRoute: typeof DevRoute
     }
     '/_authenticated/play/$characterId': {
       id: '/_authenticated/play/$characterId'
@@ -510,41 +244,13 @@ const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
 interface DevRouteChildren {
-  DevConfigRoute: typeof DevConfigRoute
-  DevCreaturesRoute: typeof DevCreaturesRoute
-  DevImportRoute: typeof DevImportRoute
-  DevItemsRoute: typeof DevItemsRoute
-  DevMapRoute: typeof DevMapRoute
-  DevMonstersRoute: typeof DevMonstersRoute
-  DevNpcsRoute: typeof DevNpcsRoute
-  DevObjectsRoute: typeof DevObjectsRoute
   DevOverviewRoute: typeof DevOverviewRoute
-  DevPalettesRoute: typeof DevPalettesRoute
-  DevScriptsRoute: typeof DevScriptsRoute
-  DevSpellsRoute: typeof DevSpellsRoute
-  DevSpritesRoute: typeof DevSpritesRoute
-  DevVocationsRoute: typeof DevVocationsRoute
   DevIndexRoute: typeof DevIndexRoute
-  DevObjectsImportClientRoute: typeof DevObjectsImportClientRoute
 }
 
 const DevRouteChildren: DevRouteChildren = {
-  DevConfigRoute: DevConfigRoute,
-  DevCreaturesRoute: DevCreaturesRoute,
-  DevImportRoute: DevImportRoute,
-  DevItemsRoute: DevItemsRoute,
-  DevMapRoute: DevMapRoute,
-  DevMonstersRoute: DevMonstersRoute,
-  DevNpcsRoute: DevNpcsRoute,
-  DevObjectsRoute: DevObjectsRoute,
   DevOverviewRoute: DevOverviewRoute,
-  DevPalettesRoute: DevPalettesRoute,
-  DevScriptsRoute: DevScriptsRoute,
-  DevSpellsRoute: DevSpellsRoute,
-  DevSpritesRoute: DevSpritesRoute,
-  DevVocationsRoute: DevVocationsRoute,
   DevIndexRoute: DevIndexRoute,
-  DevObjectsImportClientRoute: DevObjectsImportClientRoute,
 }
 
 const DevRouteWithChildren = DevRoute._addFileChildren(DevRouteChildren)
