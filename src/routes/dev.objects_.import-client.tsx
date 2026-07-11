@@ -13,6 +13,8 @@ import {
   controlImportJob,
   getImportJob,
   listImportJobs,
+  createOtbUploadUrl,
+  importOtbFile,
 } from "@/lib/dev/tibia/import.functions";
 
 export const Route = createFileRoute("/dev/objects_/import-client")({ component: Page });
