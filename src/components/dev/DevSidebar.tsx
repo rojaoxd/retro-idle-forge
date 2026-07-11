@@ -13,6 +13,7 @@ import {
   Code2,
   MessagesSquare,
   Boxes,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -52,7 +53,10 @@ const groups: Group[] = [
   },
   {
     title: "Sistema",
-    items: [{ to: "/dev/config", label: "Config Global", icon: Settings }],
+    items: [
+      { to: "/dev/import", label: "Import OTServ 7.4", icon: Download },
+      { to: "/dev/config", label: "Config Global", icon: Settings },
+    ],
   },
 ];
 

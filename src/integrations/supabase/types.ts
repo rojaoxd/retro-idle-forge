@@ -725,6 +725,738 @@ export type Database = {
         }
         Relationships: []
       }
+      otserv_channels: {
+        Row: {
+          access: number | null
+          active: boolean | null
+          id: number
+          level: number | null
+          logged: boolean | null
+          name: string
+          raw_xml: string | null
+          vocations: Json
+        }
+        Insert: {
+          access?: number | null
+          active?: boolean | null
+          id: number
+          level?: number | null
+          logged?: boolean | null
+          name: string
+          raw_xml?: string | null
+          vocations?: Json
+        }
+        Update: {
+          access?: number | null
+          active?: boolean | null
+          id?: number
+          level?: number | null
+          logged?: boolean | null
+          name?: string
+          raw_xml?: string | null
+          vocations?: Json
+        }
+        Relationships: []
+      }
+      otserv_groups: {
+        Row: {
+          access_level: number | null
+          custom_flags: number | null
+          flags: number | null
+          id: number
+          name: string
+          raw_xml: string | null
+          violation_level: number | null
+        }
+        Insert: {
+          access_level?: number | null
+          custom_flags?: number | null
+          flags?: number | null
+          id: number
+          name: string
+          raw_xml?: string | null
+          violation_level?: number | null
+        }
+        Update: {
+          access_level?: number | null
+          custom_flags?: number | null
+          flags?: number | null
+          id?: number
+          name?: string
+          raw_xml?: string | null
+          violation_level?: number | null
+        }
+        Relationships: []
+      }
+      otserv_houses: {
+        Row: {
+          created_at: string
+          entry_x: number
+          entry_y: number
+          entry_z: number
+          id: number
+          name: string
+          owner_character_id: string | null
+          raw_xml: string | null
+          rent: number | null
+          size: number | null
+          town_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          entry_x: number
+          entry_y: number
+          entry_z: number
+          id: number
+          name: string
+          owner_character_id?: string | null
+          raw_xml?: string | null
+          rent?: number | null
+          size?: number | null
+          town_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          entry_x?: number
+          entry_y?: number
+          entry_z?: number
+          id?: number
+          name?: string
+          owner_character_id?: string | null
+          raw_xml?: string | null
+          rent?: number | null
+          size?: number | null
+          town_id?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      otserv_items: {
+        Row: {
+          ammo_type: string | null
+          armor: number | null
+          article: string | null
+          attack: number | null
+          attributes: Json
+          charges: number | null
+          created_at: string
+          decayto: number | null
+          defense: number | null
+          description: string | null
+          duration: number | null
+          effect: string | null
+          flags: Json
+          fluid_source: string | null
+          id: number
+          maxtextlen: number | null
+          name: string
+          plural: string | null
+          range_val: number | null
+          raw_xml: string | null
+          shoot_type: string | null
+          slot_type: string | null
+          transformdeequipto: number | null
+          transformequipto: number | null
+          updated_at: string
+          weapon_type: string | null
+          weight: number | null
+          writeable: boolean | null
+        }
+        Insert: {
+          ammo_type?: string | null
+          armor?: number | null
+          article?: string | null
+          attack?: number | null
+          attributes?: Json
+          charges?: number | null
+          created_at?: string
+          decayto?: number | null
+          defense?: number | null
+          description?: string | null
+          duration?: number | null
+          effect?: string | null
+          flags?: Json
+          fluid_source?: string | null
+          id: number
+          maxtextlen?: number | null
+          name: string
+          plural?: string | null
+          range_val?: number | null
+          raw_xml?: string | null
+          shoot_type?: string | null
+          slot_type?: string | null
+          transformdeequipto?: number | null
+          transformequipto?: number | null
+          updated_at?: string
+          weapon_type?: string | null
+          weight?: number | null
+          writeable?: boolean | null
+        }
+        Update: {
+          ammo_type?: string | null
+          armor?: number | null
+          article?: string | null
+          attack?: number | null
+          attributes?: Json
+          charges?: number | null
+          created_at?: string
+          decayto?: number | null
+          defense?: number | null
+          description?: string | null
+          duration?: number | null
+          effect?: string | null
+          flags?: Json
+          fluid_source?: string | null
+          id?: number
+          maxtextlen?: number | null
+          name?: string
+          plural?: string | null
+          range_val?: number | null
+          raw_xml?: string | null
+          shoot_type?: string | null
+          slot_type?: string | null
+          transformdeequipto?: number | null
+          transformequipto?: number | null
+          updated_at?: string
+          weapon_type?: string | null
+          weight?: number | null
+          writeable?: boolean | null
+        }
+        Relationships: []
+      }
+      otserv_monsters: {
+        Row: {
+          attacks: Json
+          created_at: string
+          defenses: Json
+          elements: Json
+          experience: number
+          flags: Json
+          health_max: number
+          id: string
+          immunities: Json
+          look: Json
+          loot: Json
+          manacost: number | null
+          name: string
+          name_description: string | null
+          race: string | null
+          raw_xml: string | null
+          speed: number
+          strategy: Json
+          summons: Json
+          target_change: Json
+          updated_at: string
+          voices: Json
+        }
+        Insert: {
+          attacks?: Json
+          created_at?: string
+          defenses?: Json
+          elements?: Json
+          experience?: number
+          flags?: Json
+          health_max?: number
+          id?: string
+          immunities?: Json
+          look?: Json
+          loot?: Json
+          manacost?: number | null
+          name: string
+          name_description?: string | null
+          race?: string | null
+          raw_xml?: string | null
+          speed?: number
+          strategy?: Json
+          summons?: Json
+          target_change?: Json
+          updated_at?: string
+          voices?: Json
+        }
+        Update: {
+          attacks?: Json
+          created_at?: string
+          defenses?: Json
+          elements?: Json
+          experience?: number
+          flags?: Json
+          health_max?: number
+          id?: string
+          immunities?: Json
+          look?: Json
+          loot?: Json
+          manacost?: number | null
+          name?: string
+          name_description?: string | null
+          race?: string | null
+          raw_xml?: string | null
+          speed?: number
+          strategy?: Json
+          summons?: Json
+          target_change?: Json
+          updated_at?: string
+          voices?: Json
+        }
+        Relationships: []
+      }
+      otserv_npcs: {
+        Row: {
+          created_at: string
+          floor_change: boolean | null
+          health_max: number | null
+          id: string
+          keywords: Json
+          look: Json
+          name: string
+          parameters: Json
+          raw_lua: string | null
+          raw_xml: string | null
+          script_file: string | null
+          script_ref: string | null
+          shop_items: Json
+          speed: number | null
+          travels: Json
+          updated_at: string
+          voices: Json
+          walk_interval: number | null
+        }
+        Insert: {
+          created_at?: string
+          floor_change?: boolean | null
+          health_max?: number | null
+          id?: string
+          keywords?: Json
+          look?: Json
+          name: string
+          parameters?: Json
+          raw_lua?: string | null
+          raw_xml?: string | null
+          script_file?: string | null
+          script_ref?: string | null
+          shop_items?: Json
+          speed?: number | null
+          travels?: Json
+          updated_at?: string
+          voices?: Json
+          walk_interval?: number | null
+        }
+        Update: {
+          created_at?: string
+          floor_change?: boolean | null
+          health_max?: number | null
+          id?: string
+          keywords?: Json
+          look?: Json
+          name?: string
+          parameters?: Json
+          raw_lua?: string | null
+          raw_xml?: string | null
+          script_file?: string | null
+          script_ref?: string | null
+          shop_items?: Json
+          speed?: number | null
+          travels?: Json
+          updated_at?: string
+          voices?: Json
+          walk_interval?: number | null
+        }
+        Relationships: []
+      }
+      otserv_outfits: {
+        Row: {
+          access: number | null
+          created_at: string
+          gender: string | null
+          id: string
+          look_type: number
+          name: string
+          premium: boolean | null
+          quest_storage: number | null
+          raw_xml: string | null
+          unlocked: boolean | null
+          updated_at: string
+        }
+        Insert: {
+          access?: number | null
+          created_at?: string
+          gender?: string | null
+          id?: string
+          look_type: number
+          name: string
+          premium?: boolean | null
+          quest_storage?: number | null
+          raw_xml?: string | null
+          unlocked?: boolean | null
+          updated_at?: string
+        }
+        Update: {
+          access?: number | null
+          created_at?: string
+          gender?: string | null
+          id?: string
+          look_type?: number
+          name?: string
+          premium?: boolean | null
+          quest_storage?: number | null
+          raw_xml?: string | null
+          unlocked?: boolean | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      otserv_raids: {
+        Row: {
+          enabled: boolean | null
+          events: Json
+          id: string
+          interval_sec: number | null
+          margin: number | null
+          name: string
+          raw_xml: string | null
+        }
+        Insert: {
+          enabled?: boolean | null
+          events?: Json
+          id?: string
+          interval_sec?: number | null
+          margin?: number | null
+          name: string
+          raw_xml?: string | null
+        }
+        Update: {
+          enabled?: boolean | null
+          events?: Json
+          id?: string
+          interval_sec?: number | null
+          margin?: number | null
+          name?: string
+          raw_xml?: string | null
+        }
+        Relationships: []
+      }
+      otserv_scripts_registry: {
+        Row: {
+          created_at: string
+          file_path: string
+          id: string
+          name: string
+          notes: string | null
+          original_lua: string | null
+          priority: number | null
+          script_type: string
+          status: string
+          target: Json
+          ts_impl: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          file_path: string
+          id?: string
+          name: string
+          notes?: string | null
+          original_lua?: string | null
+          priority?: number | null
+          script_type: string
+          status?: string
+          target?: Json
+          ts_impl?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          file_path?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          original_lua?: string | null
+          priority?: number | null
+          script_type?: string
+          status?: string
+          target?: Json
+          ts_impl?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      otserv_spawns: {
+        Row: {
+          center_x: number
+          center_y: number
+          center_z: number
+          creatures: Json
+          id: string
+          radius: number
+        }
+        Insert: {
+          center_x: number
+          center_y: number
+          center_z: number
+          creatures?: Json
+          id?: string
+          radius?: number
+        }
+        Update: {
+          center_x?: number
+          center_y?: number
+          center_z?: number
+          creatures?: Json
+          id?: string
+          radius?: number
+        }
+        Relationships: []
+      }
+      otserv_spells: {
+        Row: {
+          aggressive: boolean | null
+          allowfaruse: boolean | null
+          blocktype: string | null
+          charges: number | null
+          conjure: Json
+          created_at: string
+          event_type: string | null
+          event_value: string | null
+          exhaustion: number | null
+          id: string
+          item_id: number | null
+          kind: string
+          level: number | null
+          maglv: number | null
+          mana: number | null
+          name: string
+          needtarget: boolean | null
+          premium: boolean | null
+          range_val: number | null
+          raw_lua: string | null
+          raw_xml: string | null
+          selftarget: boolean | null
+          soul: number | null
+          updated_at: string
+          vocations: Json
+          words: string | null
+        }
+        Insert: {
+          aggressive?: boolean | null
+          allowfaruse?: boolean | null
+          blocktype?: string | null
+          charges?: number | null
+          conjure?: Json
+          created_at?: string
+          event_type?: string | null
+          event_value?: string | null
+          exhaustion?: number | null
+          id?: string
+          item_id?: number | null
+          kind: string
+          level?: number | null
+          maglv?: number | null
+          mana?: number | null
+          name: string
+          needtarget?: boolean | null
+          premium?: boolean | null
+          range_val?: number | null
+          raw_lua?: string | null
+          raw_xml?: string | null
+          selftarget?: boolean | null
+          soul?: number | null
+          updated_at?: string
+          vocations?: Json
+          words?: string | null
+        }
+        Update: {
+          aggressive?: boolean | null
+          allowfaruse?: boolean | null
+          blocktype?: string | null
+          charges?: number | null
+          conjure?: Json
+          created_at?: string
+          event_type?: string | null
+          event_value?: string | null
+          exhaustion?: number | null
+          id?: string
+          item_id?: number | null
+          kind?: string
+          level?: number | null
+          maglv?: number | null
+          mana?: number | null
+          name?: string
+          needtarget?: boolean | null
+          premium?: boolean | null
+          range_val?: number | null
+          raw_lua?: string | null
+          raw_xml?: string | null
+          selftarget?: boolean | null
+          soul?: number | null
+          updated_at?: string
+          vocations?: Json
+          words?: string | null
+        }
+        Relationships: []
+      }
+      otserv_stages: {
+        Row: {
+          id: string
+          max_level: number | null
+          min_level: number
+          multiplier: number
+          world_id: number | null
+        }
+        Insert: {
+          id?: string
+          max_level?: number | null
+          min_level: number
+          multiplier?: number
+          world_id?: number | null
+        }
+        Update: {
+          id?: string
+          max_level?: number | null
+          min_level?: number
+          multiplier?: number
+          world_id?: number | null
+        }
+        Relationships: []
+      }
+      otserv_towns: {
+        Row: {
+          id: number
+          name: string
+          temple_x: number
+          temple_y: number
+          temple_z: number
+        }
+        Insert: {
+          id: number
+          name: string
+          temple_x: number
+          temple_y: number
+          temple_z: number
+        }
+        Update: {
+          id?: number
+          name?: string
+          temple_x?: number
+          temple_y?: number
+          temple_z?: number
+        }
+        Relationships: []
+      }
+      otserv_vocations: {
+        Row: {
+          attackspeed: number | null
+          client_id: number | null
+          created_at: string
+          description: string | null
+          formula: Json
+          from_voc: number | null
+          gaincap: number | null
+          gainhp: number | null
+          gainhpamount: number | null
+          gainhpticks: number | null
+          gainmana: number | null
+          gainmanaamount: number | null
+          gainmanaticks: number | null
+          gainsoulticks: number | null
+          id: number
+          lessloss: number | null
+          manamultiplier: number | null
+          name: string
+          needpremium: boolean | null
+          raw_xml: string | null
+          skill: Json
+          soulmax: number | null
+          updated_at: string
+        }
+        Insert: {
+          attackspeed?: number | null
+          client_id?: number | null
+          created_at?: string
+          description?: string | null
+          formula?: Json
+          from_voc?: number | null
+          gaincap?: number | null
+          gainhp?: number | null
+          gainhpamount?: number | null
+          gainhpticks?: number | null
+          gainmana?: number | null
+          gainmanaamount?: number | null
+          gainmanaticks?: number | null
+          gainsoulticks?: number | null
+          id: number
+          lessloss?: number | null
+          manamultiplier?: number | null
+          name: string
+          needpremium?: boolean | null
+          raw_xml?: string | null
+          skill?: Json
+          soulmax?: number | null
+          updated_at?: string
+        }
+        Update: {
+          attackspeed?: number | null
+          client_id?: number | null
+          created_at?: string
+          description?: string | null
+          formula?: Json
+          from_voc?: number | null
+          gaincap?: number | null
+          gainhp?: number | null
+          gainhpamount?: number | null
+          gainhpticks?: number | null
+          gainmana?: number | null
+          gainmanaamount?: number | null
+          gainmanaticks?: number | null
+          gainsoulticks?: number | null
+          id?: number
+          lessloss?: number | null
+          manamultiplier?: number | null
+          name?: string
+          needpremium?: boolean | null
+          raw_xml?: string | null
+          skill?: Json
+          soulmax?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      otserv_world_tiles: {
+        Row: {
+          created_at: string
+          ground_id: number | null
+          house_id: number | null
+          id: string
+          items: Json
+          tile_flags: Json
+          x: number
+          y: number
+          z: number
+        }
+        Insert: {
+          created_at?: string
+          ground_id?: number | null
+          house_id?: number | null
+          id?: string
+          items?: Json
+          tile_flags?: Json
+          x: number
+          y: number
+          z: number
+        }
+        Update: {
+          created_at?: string
+          ground_id?: number | null
+          house_id?: number | null
+          id?: string
+          items?: Json
+          tile_flags?: Json
+          x?: number
+          y?: number
+          z?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           character_name: string

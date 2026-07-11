@@ -25,6 +25,7 @@ import { Route as DevNpcsRouteImport } from './routes/dev.npcs'
 import { Route as DevMonstersRouteImport } from './routes/dev.monsters'
 import { Route as DevMapRouteImport } from './routes/dev.map'
 import { Route as DevItemsRouteImport } from './routes/dev.items'
+import { Route as DevImportRouteImport } from './routes/dev.import'
 import { Route as DevCreaturesRouteImport } from './routes/dev.creatures'
 import { Route as DevConfigRouteImport } from './routes/dev.config'
 import { Route as AuthenticatedCharactersIndexRouteImport } from './routes/_authenticated/characters.index'
@@ -112,6 +113,11 @@ const DevItemsRoute = DevItemsRouteImport.update({
   path: '/items',
   getParentRoute: () => DevRoute,
 } as any)
+const DevImportRoute = DevImportRouteImport.update({
+  id: '/import',
+  path: '/import',
+  getParentRoute: () => DevRoute,
+} as any)
 const DevCreaturesRoute = DevCreaturesRouteImport.update({
   id: '/creatures',
   path: '/creatures',
@@ -158,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/dev': typeof DevRouteWithChildren
   '/dev/config': typeof DevConfigRoute
   '/dev/creatures': typeof DevCreaturesRoute
+  '/dev/import': typeof DevImportRoute
   '/dev/items': typeof DevItemsRoute
   '/dev/map': typeof DevMapRoute
   '/dev/monsters': typeof DevMonstersRoute
@@ -181,6 +188,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/dev/config': typeof DevConfigRoute
   '/dev/creatures': typeof DevCreaturesRoute
+  '/dev/import': typeof DevImportRoute
   '/dev/items': typeof DevItemsRoute
   '/dev/map': typeof DevMapRoute
   '/dev/monsters': typeof DevMonstersRoute
@@ -207,6 +215,7 @@ export interface FileRoutesById {
   '/dev': typeof DevRouteWithChildren
   '/dev/config': typeof DevConfigRoute
   '/dev/creatures': typeof DevCreaturesRoute
+  '/dev/import': typeof DevImportRoute
   '/dev/items': typeof DevItemsRoute
   '/dev/map': typeof DevMapRoute
   '/dev/monsters': typeof DevMonstersRoute
@@ -233,6 +242,7 @@ export interface FileRouteTypes {
     | '/dev'
     | '/dev/config'
     | '/dev/creatures'
+    | '/dev/import'
     | '/dev/items'
     | '/dev/map'
     | '/dev/monsters'
@@ -256,6 +266,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/dev/config'
     | '/dev/creatures'
+    | '/dev/import'
     | '/dev/items'
     | '/dev/map'
     | '/dev/monsters'
@@ -281,6 +292,7 @@ export interface FileRouteTypes {
     | '/dev'
     | '/dev/config'
     | '/dev/creatures'
+    | '/dev/import'
     | '/dev/items'
     | '/dev/map'
     | '/dev/monsters'
@@ -421,6 +433,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevItemsRouteImport
       parentRoute: typeof DevRoute
     }
+    '/dev/import': {
+      id: '/dev/import'
+      path: '/import'
+      fullPath: '/dev/import'
+      preLoaderRoute: typeof DevImportRouteImport
+      parentRoute: typeof DevRoute
+    }
     '/dev/creatures': {
       id: '/dev/creatures'
       path: '/creatures'
@@ -493,6 +512,7 @@ const AuthenticatedRouteRouteWithChildren =
 interface DevRouteChildren {
   DevConfigRoute: typeof DevConfigRoute
   DevCreaturesRoute: typeof DevCreaturesRoute
+  DevImportRoute: typeof DevImportRoute
   DevItemsRoute: typeof DevItemsRoute
   DevMapRoute: typeof DevMapRoute
   DevMonstersRoute: typeof DevMonstersRoute
@@ -511,6 +531,7 @@ interface DevRouteChildren {
 const DevRouteChildren: DevRouteChildren = {
   DevConfigRoute: DevConfigRoute,
   DevCreaturesRoute: DevCreaturesRoute,
+  DevImportRoute: DevImportRoute,
   DevItemsRoute: DevItemsRoute,
   DevMapRoute: DevMapRoute,
   DevMonstersRoute: DevMonstersRoute,
