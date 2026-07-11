@@ -54,7 +54,7 @@ function Page() {
   const [sprFile, setSprFile] = useState<File | null>(null);
   const [otbFile, setOtbFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const pollRef = useRef<number | null>(null);
+  const runningRef2 = useRef<null>(null); void runningRef2;
   const runningRef = useRef(false);
 
   const refreshList = useCallback(async () => {
