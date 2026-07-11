@@ -1,129 +1,73 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import {
-  LayoutDashboard,
-  Image,
-  Package,
-  Skull,
-  Sparkles,
-  Wand2,
-  Settings,
-  LogOut,
-  Map,
-  Palette,
-  Code2,
-  MessagesSquare,
-  Boxes,
-  Download,
-} from "lucide-react";
+import { LayoutDashboard, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 type Item = { to: string; label: string; icon: any };
 type Group = { title: string; items: Item[] };
 
+/**
+ * Sidebar do painel /dev após o reset.
+ * Depois que a fase §5 do plano cabear o /dev ao canal admin do game-server
+ * (players online, broadcast, kick, tail de logs), novos grupos entram aqui.
+ */
 const groups: Group[] = [
   {
     title: "Painel",
     items: [{ to: "/dev/overview", label: "Overview", icon: LayoutDashboard }],
   },
-  {
-    title: "Mundo",
-    items: [
-      { to: "/dev/map", label: "Editor de Mapa (RME)", icon: Map },
-      { to: "/dev/palettes", label: "Paletas de Criação", icon: Palette },
-    ],
-  },
-  {
-    title: "Objetos",
-    items: [
-      { to: "/dev/sprites", label: "Sprites", icon: Image },
-      { to: "/dev/objects", label: "Object Builder", icon: Boxes },
-      { to: "/dev/items", label: "Itens (legado)", icon: Package },
-      { to: "/dev/monsters", label: "Monstros", icon: Skull },
-    ],
-  },
-  {
-    title: "Gameplay",
-    items: [
-      { to: "/dev/vocations", label: "Vocações & Magias", icon: Wand2 },
-      { to: "/dev/npcs", label: "NPCs & Quests", icon: MessagesSquare },
-      { to: "/dev/scripts", label: "Actions & Movements", icon: Code2 },
-      { to: "/dev/spells", label: "Efeitos Visuais", icon: Sparkles },
-    ],
-  },
-  {
-    title: "Sistema",
-    items: [
-      { to: "/dev/import", label: "Import OTServ 7.4", icon: Download },
-      { to: "/dev/config", label: "Config Global", icon: Settings },
-    ],
-  },
 ];
 
-export function DevSidebar({ email }: { email?: string | null }) {
+export function DevSidebar({ email }: { email: string | null }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+
   return (
-    <aside
-      className="flex h-screen w-64 shrink-0 flex-col border-r"
-      style={{ background: "var(--dev-surface)", borderColor: "var(--dev-border)" }}
-    >
-      <div
-        className="flex h-14 items-center gap-2 border-b px-4"
-        style={{ borderColor: "var(--dev-border)" }}
-      >
-        <div className="grid h-8 w-8 place-items-center rounded"
-          style={{ background: "var(--dev-accent)", color: "#052e2b" }}>
-          <Sparkles className="h-4 w-4" />
-        </div>
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold" style={{ color: "var(--dev-text)" }}>
-            Engine Console
-          </span>
-          <span className="text-[10px] uppercase tracking-widest"
-            style={{ color: "var(--dev-text-dim)" }}>
-            MMORPG · Admin
-          </span>
+    <aside className="dev-panel w-60 shrink-0 border-r border-slate-800/60 flex flex-col">
+      <div className="border-b border-slate-800/60 p-4">
+        <div className="text-sm font-semibold text-slate-100">Engine Console</div>
+        <div className="mt-1 text-[10px] uppercase tracking-wider text-slate-500">
+          {email ?? "—"}
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-2 space-y-3">
+      <nav className="flex-1 overflow-y-auto p-3 space-y-4">
         {groups.map((g) => (
           <div key={g.title}>
-            <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest"
-              style={{ color: "var(--dev-text-dim)" }}>
+            <div className="mb-1 px-2 text-[10px] uppercase tracking-widest text-slate-500">
               {g.title}
             </div>
-            <div className="space-y-1">
+            <ul className="space-y-0.5">
               {g.items.map((it) => {
-                const active = pathname.startsWith(it.to);
+                const active = pathname === it.to || pathname.startsWith(it.to + "/");
                 return (
-                  <Link key={it.to} to={it.to}
-                    className={cn("flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors")}
-                    style={{
-                      background: active ? "var(--dev-surface-2)" : "transparent",
-                      color: active ? "var(--dev-text)" : "var(--dev-text-dim)",
-                      borderLeft: active ? "2px solid var(--dev-accent)" : "2px solid transparent",
-                    }}>
-                    <it.icon className="h-4 w-4" />
-                    {it.label}
-                  </Link>
+                  <li key={it.to}>
+                    <Link
+                      to={it.to}
+                      className={cn(
+                        "flex items-center gap-2 rounded px-2 py-1.5 text-xs transition",
+                        active
+                          ? "bg-slate-800 text-slate-100"
+                          : "text-slate-400 hover:bg-slate-800/40 hover:text-slate-200",
+                      )}
+                    >
+                      <it.icon className="h-3.5 w-3.5" />
+                      <span>{it.label}</span>
+                    </Link>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           </div>
         ))}
       </nav>
 
-      <div className="border-t p-3 text-xs"
-        style={{ borderColor: "var(--dev-border)", color: "var(--dev-text-dim)" }}>
-        <div className="truncate">{email ?? "—"}</div>
-        <button type="button"
-          onClick={() => supabase.auth.signOut().then(() => window.location.reload())}
-          className="mt-2 flex items-center gap-2 text-xs hover:underline"
-          style={{ color: "var(--dev-accent-2)" }}>
-          <LogOut className="h-3 w-3" /> Sair
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => supabase.auth.signOut()}
+        className="flex items-center gap-2 border-t border-slate-800/60 px-4 py-3 text-xs text-slate-400 hover:text-slate-200"
+      >
+        <LogOut className="h-3.5 w-3.5" /> Sair
+      </button>
     </aside>
   );
 }
