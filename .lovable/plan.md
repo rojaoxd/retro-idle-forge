@@ -1,13 +1,13 @@
 **Diagnóstico atual**
 
-O servidor já passa do erro anterior de `WebSocket`, mas agora cai por configuração ausente:
+O servidor caía por configuração ausente:
 
 ```text
 Error: Missing env SUPABASE_JWKS_URL
 at new AuthService (.../engine-src/auth-service.js:23:11)
 ```
 
-Ou seja: o problema agora não é mais o patch do `ws`; é a variável de ambiente `SUPABASE_JWKS_URL` que o processo PM2 não está recebendo.
+Ou seja: o problema não era o cliente Tibia; era o backend WebSocket usado pelo cliente web do site. O código agora aceita `SUPABASE_JWKS_URL` explícito ou deriva automaticamente a JWKS URL a partir de `SUPABASE_URL`.
 
 **Plano para resolver de uma vez**
 
@@ -19,14 +19,14 @@ Ou seja: o problema agora não é mais o patch do `ws`; é a variável de ambien
    - Abrir `engine-src/auth-service.js` e confirmar se ele exige exatamente `SUPABASE_JWKS_URL`.
    - Usar o projeto Supabase atual: `hewxrvrqbzkggajgojid`.
 
-3. **Adicionar a variável correta**
+3. **Adicionar a variável correta ou usar fallback automático**
    - Valor provável:
 
 ```text
 https://hewxrvrqbzkggajgojid.supabase.co/auth/v1/.well-known/jwks.json
 ```
 
-   - Adicionar essa variável no lugar correto usado pelo PM2.
+   - O código foi ajustado para montar essa URL automaticamente quando `SUPABASE_URL` já existir.
 
 4. **Reiniciar corretamente com ambiente atualizado**
    - Usar `pm2 restart olddungeons-engine --update-env`.
