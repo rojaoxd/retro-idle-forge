@@ -1,82 +1,154 @@
-## Objetivo
 
-1. Zerar TUDO do Object Builder (sprites + objetos + composições) sem mexer em `otserv_items` (OTB já importado, 4438 rows) nem no mapa.
-2. Reimportar `Tibia.dat` + `Tibia.spr` do zero, com IDs batendo com `items.otb` (server_id ↔ client_id).
-3. Import que **sobrevive a navegação/refresh**: você pode fechar a aba, voltar mais tarde, e ele retoma de onde parou.
+# Reset e migração para Tibia74-JS-Engine (fork liberado pelo autor)
 
-## Bloqueio atual
+Licença: **confirmada** — autor liberou no OTLand para uso/fork livre. Vamos tratar como base direta (não só referência): copiar/adaptar o código do repo `Inconcessus/Tibia74-JS-Engine` dentro do nosso `game-server/`.
 
-`map_tiles.tile_id → game_sprites(id)` está com `ON DELETE RESTRICT` e o mapa tem 1200 tiles referenciando sprites — por isso o `DELETE` falhou na tentativa anterior. Vou trocar a FK para `ON DELETE SET NULL` (padrão do resto do schema) na migration, aí o wipe passa e os tiles ficam sem sprite até serem religados no editor após a reimportação.
+Objetivo: apagar tudo que fizemos de servidor de jogo, renderer e /dev (ficou amador), e recomeçar em cima da base do engine, mantendo apenas o site + Supabase Auth.
 
-## Passos
+---
 
-### 1. Migration (schema)
+## 1. O que apagar
 
-- `ALTER TABLE map_tiles DROP CONSTRAINT map_tiles_tile_id_fkey`, recriar com `ON DELETE SET NULL`.
-- `ALTER TABLE otserv_items ADD COLUMN client_id integer` + índice — pra ligar cada item de `items.xml` (server_id) ao `client_id` do `Tibia.dat`. Populado pelo parser de `items.otb`.
-- Nova tabela `object_import_jobs`:
-  - `id uuid`, `status` (pending/running/paused/completed/failed), `dat_path`, `spr_path`, `otb_path` (paths no bucket `game-sprites`), `categories` (jsonb: {item,outfit,effect,missile}), `total`, `cursor`, `sprites_uploaded`, `objects_inserted`, `objects_updated`, `error text`, `log jsonb`, `created_by uuid`, timestamps.
-  - RLS: admin-only (via `has_role`).
+**Servidor Colyseus (todo):**
+- `game-server/` inteiro
 
-### 2. Wipe (após migration aprovada)
+**Cliente Phaser + Colyseus:**
+- `src/game/`, `src/components/tibia/PhaserCanvas.tsx`, `GameViewport.tsx`
+- `src/components/game/canvas/GameCanvas.tsx`
+- `src/net/colyseus.ts`
+- `src/stores/{gameSessionStore,netStore,tibiaStore,gameStore}.ts` (recriamos enxutos depois)
+- deps: `phaser`, `colyseus`, `colyseus.js`, `@colyseus/schema`, `@colyseus/ws-transport`
 
-Um único data-op:
+**Importadores /dev amadores:**
+- `src/lib/dev/tibia/*`, `src/lib/dev/obd/*`, `src/lib/otserv/*`
+- `src/lib/dev/{items,objects,sprites,creatures,monsters,npcs,palettes,scripts,effects,vocations,map,server,config}.functions.ts`
+- `src/routes/dev.{items,objects,objects_.import-client,sprites,creatures,monsters,npcs,palettes,scripts,spells,effects,vocations,map,config,import}.tsx`
+- `src/components/dev/{MapEditor,SpritePicker,SpriteThumb,OverviewPanel}.tsx`
+- `scripts/otserv-import/`, `public/parse-otbm.ts`
+
+**Banco (migration destrutiva):**
+- Drop: `game_items`, `game_objects`, `game_object_sprites`, `game_sprites`, `game_creatures`, `game_visual_effects`, `game_config`, `map_tiles`, `map_areas`, `map_palettes`, `object_import_jobs`, todas as `otserv_*`, `monsters`, `npcs`, `npc_keywords`, `npc_trades`, `quests`, `quest_steps`, `scripts_actions`, `scripts_movements`, `spells`, `vocations`, `vocations_catalog`, `server_configs`, `server_logs`, `online_players`
+- **Preservar/adaptar**: `profiles`, `user_roles`, `characters` (schema novo — §3)
+- Esvaziar bucket `game-sprites`
+
+**Intacto:** rotas `/auth`, `/_authenticated/*`, `/characters`, integrações Supabase, site marketing.
+
+---
+
+## 2. Novo `game-server/` (fork do Tibia74-JS-Engine)
+
+Copiar `src/` e `data/` do repo, migrar para TypeScript conforme necessário, e substituir SOMENTE:
+
+**Removido do original:**
+- `login.js` + `account-database.js` (SQLite) → substituído por auth Supabase
+- `accounts.db`
+- persistência de character em JSON local → substituída por Supabase
+
+**Adaptações (adapters):**
 ```
-DELETE FROM game_object_sprites;
-DELETE FROM game_objects;
-DELETE FROM game_sprites;
-```
-Arquivos PNG do bucket `game-sprites/imported/` ficam (dedupe por hash reaproveita).
-
-### 3. Parser `items.otb` + rota de upload
-
-`items.otb` é o mapa server_id ↔ client_id. Novo parser em `src/lib/dev/otb/parser.ts` (formato OTBM-like, root node + item nodes com `ROOT_ATTR_ID`, `ITEM_ATTR_SERVERID`, `ITEM_ATTR_CLIENTID`). Server fn `importOtb({ path })` lê do bucket, faz `UPDATE otserv_items SET client_id = ? WHERE id = server_id` em massa (upsert por id caso um server_id do OTB não exista ainda em `otserv_items`).
-
-### 4. Import resumível (o coração da mudança)
-
-Fluxo:
-
-```text
-UI: /dev/objects/import-client
-  ├─ Upload dat/spr/otb → bucket game-sprites/imports/{jobId}/
-  ├─ createImportJob({ jobId, paths, categories }) → job row status=pending
-  └─ Polling loop (setInterval 2s) chama processImportBatch({ jobId, batchSize })
-                                              │
-                                              ▼
-Server fn processImportBatch (createServerFn + requireSupabaseAuth + admin):
-  1. Lê job row (cursor, categories, paths)
-  2. Baixa Tibia.dat + Tibia.spr do bucket (cache em memória por invocation)
-  3. Parse dat até `cursor + batchSize` (skip anteriores usando offsets no job.log)
-  4. Para cada thing: extrai sprites via SprReader, PNG-encode, sha1, upload dedup, insere game_objects + game_object_sprites
-  5. Atualiza cursor, counters, aparece no log
-  6. Retorna { done, total, cursor, log }
+game-server/
+  src/
+    (todo o engine original: world.js, tile.js, creature.js, monster.js,
+     spells.js, combat.js, pathfinder.js, container.js, depot.js, house.js,
+     packet-reader.js, packet-writer.js, gameserver.js, ws-server.js, etc.)
+    adapters/
+      supabase-auth.ts       # valida JWT via SUPABASE_JWKS no handshake WS
+      supabase-characters.ts # load/save character no Supabase (substitui JSON)
+      supabase-profiles.ts   # lê profile/roles
+  data/
+    (mapa .otbm, items.xml, monsters/, npcs/, spells/ — copiados do repo)
+  package.json               # node puro + ws + jose + @supabase/supabase-js + xml2js
+  ecosystem.config.cjs       # PM2 para EC2
 ```
 
-Persistência que garante resumo:
-- **Cursor no banco**, não em memória do browser. Fechar a aba não perde nada.
-- Cada `processImportBatch` é atômico por objeto (transação por thing).
-- Botão "Continuar" reabre o job pelo id (salvo em `localStorage` como fallback + listagem de jobs abertos na tela).
-- Botão "Pausar" seta status=paused; polling para; "Retomar" volta ao loop.
-- Se batch falhar, job vai pra `failed` com `error`; UI mostra e permite retry do último cursor.
+**Fluxo:**
+1. Site → Supabase Auth → JWT
+2. Browser abre WS para EC2 e envia JWT no primeiro pacote
+3. `adapters/supabase-auth.ts` valida JWT (JWKS) → `supabase-characters.ts` carrega character → spawna no mundo
+4. Tick 50ms do engine roda gameplay
+5. Save periódico (30s) + save no logout → `supabase-characters.ts` grava snapshot
 
-UI mostra: progress bar, contadores (sprites únicos / objetos inseridos), log de batches, botões Pausar/Retomar/Cancelar. Sobrevive a F5 porque tudo vem do banco.
+**Ports do engine:** mesmos do original (WS binário na 2000, admin na 1338, HTTP health na 8080).
 
-### 5. Alinhamento final (após import)
+---
 
-Uma vez que `otserv_items.client_id` e `game_objects.client_id` (kind=item) existam:
-- View `v_items_aligned` juntando `otserv_items` ↔ `game_objects` por `client_id`.
-- Painel simples de "itens sem client" / "objetos sem server" pra você conferir.
+## 3. Novo schema `characters`
 
-## Ordem de execução
+Substitui colunas atuais pelo formato do engine (snapshot inteiro do estado):
+- `id`, `user_id`, `name`, `sex`, `vocation`, `level`, `experience`
+- `health`, `health_max`, `mana`, `mana_max`, `capacity`
+- `pos_x`, `pos_y`, `pos_z`
+- `skills` jsonb (fist/club/sword/axe/dist/shield/fish/magic + tries)
+- `inventory` jsonb (10 slots + containers aninhados)
+- `depot` jsonb (por cidade)
+- `outfit` jsonb (lookType, head, body, legs, feet, addons)
+- `spells_known` text[]
+- `conditions` jsonb (buffs/debuffs ativos)
+- `last_login`, `online`
 
-1. Migration (FK + coluna + tabela de jobs).
-2. Data-op de wipe.
-3. Parser OTB + parser refatorado dat/spr no servidor.
-4. Server fns `createImportJob` / `processImportBatch` / `pauseImportJob` / `getImportJob` / `listImportJobs`.
-5. Reescrita da rota `/dev/objects/import-client` pra usar o job.
-6. Você sobe `Tibia.dat`, `Tibia.spr`, `items.otb` (esse último você precisa me enviar — não veio junto ainda) e clica Iniciar.
+---
 
-## Perguntas antes de codar
+## 4. Novo cliente (Canvas 2D — sem Phaser)
 
-- Você tem o `items.otb` da versão 7.4 pra subir? Sem ele, o alinhamento client_id ↔ server_id não é possível (o `.dat` sozinho não carrega server ids).
-- Confirma OK trocar a FK do mapa pra `SET NULL`? Os 1200 tiles vão ficar com `tile_id = NULL` até você repintar/religar no editor de mapa (o `object_id` desses tiles já era SET NULL, então o mesmo comportamento).
+Portar o client HTML/JS do repo para dentro do React:
+- `src/lib/engine-client/` — TypeScript port de `gameclient.js`, `renderer.js`, `canvas.js`, `sprite-loader.js`, `minimap.js`, `input.js`, `protocol.js`
+- **Sprites**: `Tibia.dat`/`.spr` servidos pelo próprio `game-server` via HTTP estático (não Supabase Storage)
+- `src/components/game/EngineCanvas.tsx` monta `<canvas>` e chama o engine-client
+- HUD React já pronto (`TibiaShell`, `Minimap`, `VitalsBars`, `ChatDock`, `QuickInventory`, `SkillsPanel`, `StoreVipRow`) permanece, trocando fonte de dados por um novo `useEngineStore`
+- Rota `/play/$characterId` conecta ao WS AWS com JWT e monta o canvas
+
+---
+
+## 5. Nova `/dev` (operação de servidor, não edição de conteúdo)
+
+Fora: editores de item/sprite/mapa/monstro (o engine usa XML/OTBM — edita-se fora com RME).
+
+Dentro:
+```
+/dev/overview      # status EC2, jogadores online, uptime, tick lag
+/dev/players       # online agora, kick/ban/teleport (canal admin do engine)
+/dev/accounts      # busca profiles + gerenciar user_roles (admin/gm/tutor)
+/dev/broadcast     # motd + broadcast em tempo real
+/dev/logs          # tail server_logs (kill, login, trade, comando GM)
+/dev/config        # edita data/config.json do engine via canal admin
+/dev/data-files    # read-only browser dos items.xml / monsters/*.xml
+```
+
+Tabelas novas mínimas: `server_logs` e `server_broadcasts`. Zero tabelas de conteúdo de jogo.
+
+Editores visuais in-engine podem voltar em fase futura.
+
+---
+
+## 6. Ordem de execução
+
+Este plano cobre **§1 + §2** (limpeza total + fork do engine com auth Supabase funcionando). Renderer/gameplay/UI ficam para turnos seguintes:
+
+1. Migration destrutiva (drop das tabelas + reset do `characters` + esvaziar bucket)
+2. Deletar todos os arquivos listados em §1
+3. `git clone` do Tibia74-JS-Engine → copiar `src/` + `data/` para `game-server/vendor/tibia74/` e wrapper `game-server/src/index.ts`
+4. Escrever `adapters/supabase-auth.ts`, `adapters/supabase-characters.ts`, `adapters/supabase-profiles.ts`
+5. Remover `login.js`/`account-database.js`; plugar adapters em `gameserver.js`/`ws-server.js`
+6. `package.json` novo (`ws`, `jose`, `@supabase/supabase-js`, `xml2js`) + `ecosystem.config.cjs` PM2
+7. README com instruções de deploy EC2
+
+Fases seguintes (planos separados quando pedir):
+- §4: portar cliente Canvas 2D
+- §5: nova `/dev`
+- Combate/spells/containers já vêm prontos do fork — só afinar
+
+---
+
+## 7. Riscos
+
+- **Assets Tibia 7.4** (`Tibia.dat`/`.spr`/`Tibia74.otbm`): você é responsável pelo direito de uso; servidos pelo game-server no EC2. Confirma que tem os arquivos ou que vamos usar os que estão no repo?
+- **Migration destrutiva**: apaga todos os dados importados. Sem rollback.
+- **JavaScript → TypeScript**: manter o fork em JS puro (rápido) ou portar para TS (mais trabalho, melhor DX)?
+
+---
+
+## Confirmações antes de implementar
+
+1. Ok dropar todas as tabelas de conteúdo listadas em §1?
+2. Fork do engine **em JS puro** (como está no repo, mais rápido) ou **portar para TypeScript**?
+3. Ok começar por §1 + §2 (limpeza + fork rodando com JWT Supabase) e deixar cliente/dev para próximos turnos?
