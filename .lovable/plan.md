@@ -1,40 +1,48 @@
-# Fase §4 — Cliente Canvas 2D
+**Diagnóstico atual**
 
-O engine já vem com um cliente HTML/JS pronto (`game-server/vendor-client-reference/`, ~21k linhas: renderer, sprite-buffer, canvas, protocol, hotbar, minimap, chat, containers, spellbook, outfit modal, som ambiente, etc.). **Reescrever tudo em React/TS é meses de trabalho e quebra recursos que já funcionam.** A estratégia enxuta é reaproveitar o cliente inteiro e só substituir o que muda: a tela de login (usa Supabase) e a origem dos assets/WS (aponta pro EC2).
+O servidor já passa do erro anterior de `WebSocket`, mas agora cai por configuração ausente:
 
-## O que vamos fazer
+```text
+Error: Missing env SUPABASE_JWKS_URL
+at new AuthService (.../engine-src/auth-service.js:23:11)
+```
 
-1. **Copiar o cliente vendor para `public/client/`** (CSS, PNGs, JS `src/`, `data/740/constants.json`). Fica servido em `/client/*` pelo Vite/edge.
-2. **Servir sprites do game-server** — `Tibia.spr`/`Tibia.dat`/`sounds/` ficam no EC2 (não no repo). O cliente carrega via HTTP do game-server; adicionamos um `VITE_GAME_ASSETS_URL` e patch pequeno no `sprite-buffer.js`/`index.js` para usar essa URL.
-3. **Substituir a tela de login do cliente** — remover `modal-create-account.js` / login por senha própria do engine. A rota `/play/$characterId` já tem sessão Supabase; passamos JWT + characterId pro cliente via `window.__LOVABLE_SESSION__` antes de bootar.
-4. **Novo `/play/$characterId`** — carrega os scripts do vendor em ordem via `<script>` injetados num `useEffect`, monta o markup do `index.html` num container, chama `gameclient.init()` com sessão pré-preenchida.
-5. **Patch no engine WS** (`game-server/engine-src/websocket-server.js`) — já espera `?token=...&characterId=...` do trabalho anterior; cliente vendor manda esses query params em vez do handshake de senha.
-6. **Rota `/characters`** — botão "Entrar" já navega pra `/play/$characterId`; sem mudança.
+Ou seja: o problema agora não é mais o patch do `ws`; é a variável de ambiente `SUPABASE_JWKS_URL` que o processo PM2 não está recebendo.
 
-## Arquivos alterados/criados
+**Plano para resolver de uma vez**
 
-**Copiar (via `cp -r`):**
-- `game-server/vendor-client-reference/css/` → `public/client/css/`
-- `game-server/vendor-client-reference/png/` → `public/client/png/`
-- `game-server/vendor-client-reference/src/` → `public/client/src/`
-- `game-server/vendor-client-reference/data/` → `public/client/data/`
+1. **Confirmar onde o PM2 lê as variáveis**
+   - Verificar se o projeto usa `.env`, `ecosystem.config.js`, `ecosystem.config.cjs` ou variáveis salvas no próprio PM2.
+   - Não mexer mais no `account-database.js` até estabilizar esse erro atual.
 
-**Criados:**
-- `public/client/lovable-bootstrap.js` — lê `window.__LOVABLE_SESSION__`, monta WS URL com JWT, pula tela de login do vendor
-- `public/client/lovable-shell.html` — markup do `index.html` do vendor, sem `<script>` e sem áudio (áudio opcional depois)
+2. **Descobrir o formato esperado pelo código**
+   - Abrir `engine-src/auth-service.js` e confirmar se ele exige exatamente `SUPABASE_JWKS_URL`.
+   - Usar o projeto Supabase atual: `hewxrvrqbzkggajgojid`.
 
-**Editados:**
-- `src/routes/_authenticated/play.$characterId.tsx` — carrega CSS+JS do vendor, injeta sessão, monta shell
-- `game-server/engine-src/http-server.js` — serve `Tibia.spr`/`Tibia.dat`/sounds via HTTP estático com CORS (para o cliente hospedado em outro domínio)
-- `.env` local + `game-server/.env.example` — `VITE_GAME_WS_URL`, `VITE_GAME_ASSETS_URL`
+3. **Adicionar a variável correta**
+   - Valor provável:
 
-## Fora de escopo desta fase
-- Reescrita TS/React do renderer (fica pro futuro se quiser HUD nosso substituindo o vendor).
-- Upload dos `Tibia.spr`/`Tibia.dat`/`Tibia74.otbm` pro EC2 (você faz manual, README já cobre).
-- Áudio ambiente (cliente vendor tem, mas depende de `.ogg` proprietários — vamos deixar mudo por padrão).
+```text
+https://hewxrvrqbzkggajgojid.supabase.co/auth/v1/.well-known/jwks.json
+```
 
-## Riscos
-- Cliente vendor mistura DOM global (`document.getElementById(...)`) com estado singleton — funciona bem numa aba, mas navegar pra fora e voltar pode deixar listener pendurado. Vamos limpar no `useEffect` cleanup (`window.gameClient?.disconnect?.()`).
-- Alguns módulos do vendor podem esperar caminhos relativos (`./png/...`); se quebrar, ajustamos `<base href>` no shell.
+   - Adicionar essa variável no lugar correto usado pelo PM2.
 
-Ok seguir por aqui?
+4. **Reiniciar corretamente com ambiente atualizado**
+   - Usar `pm2 restart olddungeons-engine --update-env`.
+   - Depois conferir logs com `pm2 logs olddungeons-engine --lines 80 --nostream`.
+
+5. **Se aparecer outro `Missing env ...`**
+   - Corrigir todas as variáveis ausentes em lote, não uma por uma, para economizar créditos e tentativas.
+
+**Próximo passo após aprovar**
+
+Eu vou te passar um único bloco de comandos seguro para: verificar o arquivo de ambiente, adicionar `SUPABASE_JWKS_URL`, reiniciar com `--update-env` e mostrar os logs finais.
+
+<presentation-actions>
+  <presentation-open-history>View History</presentation-open-history>
+</presentation-actions>
+
+<presentation-actions>
+<presentation-link url="https://docs.lovable.dev/tips-tricks/troubleshooting">Troubleshooting docs</presentation-link>
+</presentation-actions>
