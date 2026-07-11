@@ -267,6 +267,12 @@ function ImportPage() {
         </div>
       </Card>
 
+      <WorldTilesCard
+        importBatch={importBatch}
+        push={push}
+      />
+
+
       {tasks.length > 0 && (
         <Card className="p-4 space-y-2">
           <div className="flex justify-between text-sm font-medium">
