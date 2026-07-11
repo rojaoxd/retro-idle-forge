@@ -456,7 +456,7 @@ export type Database = {
           layer: string
           object_id: string | null
           spawn_monster_id: string | null
-          tile_id: number
+          tile_id: number | null
           updated_at: string
           x: number
           y: number
@@ -469,7 +469,7 @@ export type Database = {
           layer: string
           object_id?: string | null
           spawn_monster_id?: string | null
-          tile_id: number
+          tile_id?: number | null
           updated_at?: string
           x: number
           y: number
@@ -482,7 +482,7 @@ export type Database = {
           layer?: string
           object_id?: string | null
           spawn_monster_id?: string | null
-          tile_id?: number
+          tile_id?: number | null
           updated_at?: string
           x?: number
           y?: number
