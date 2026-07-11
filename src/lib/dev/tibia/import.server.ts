@@ -1,6 +1,7 @@
 // Server-only heavy import logic for Tibia.dat/.spr → game_objects / game_sprites.
 // Called by import.functions.ts server functions. Not importable from the client bundle.
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getOtservAdmin } from "@/lib/dev/tibia/adminClient.server";
+const supabaseAdmin = new Proxy({} as ReturnType<typeof getOtservAdmin>, { get: (_t, p) => (getOtservAdmin() as any)[p] });
 import { parseDat, type ThingType, type DatFlags, type ThingCategory } from "@/lib/dev/tibia/datReader";
 import { SprReader } from "@/lib/dev/tibia/sprReader";
 import { encodePng32, sha1Hex } from "@/lib/dev/tibia/pngEncoder.server";

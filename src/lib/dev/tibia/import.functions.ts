@@ -21,7 +21,7 @@ export const createImportUploadUrls = createServerFn({ method: "POST" })
   }).parse(raw))
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { getOtservAdmin } = await import("@/lib/dev/tibia/adminClient.server"); const supabaseAdmin = getOtservAdmin();
     const stamp = Date.now();
     const jobId = crypto.randomUUID();
     const prefix = `imports/${jobId}`;
@@ -63,7 +63,7 @@ export const createImportJob = createServerFn({ method: "POST" })
   }).parse(raw))
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { getOtservAdmin } = await import("@/lib/dev/tibia/adminClient.server"); const supabaseAdmin = getOtservAdmin();
     const { data: row, error } = await supabaseAdmin
       .from("object_import_jobs")
       .insert({
@@ -102,7 +102,7 @@ export const controlImportJob = createServerFn({ method: "POST" })
   }).parse(raw))
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { getOtservAdmin } = await import("@/lib/dev/tibia/adminClient.server"); const supabaseAdmin = getOtservAdmin();
     const newStatus =
       data.action === "pause" ? "paused" :
       data.action === "resume" ? "running" :
@@ -121,7 +121,7 @@ export const getImportJob = createServerFn({ method: "POST" })
   .inputValidator((raw) => z.object({ jobId: z.string().uuid() }).parse(raw))
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { getOtservAdmin } = await import("@/lib/dev/tibia/adminClient.server"); const supabaseAdmin = getOtservAdmin();
     const { data: job, error } = await supabaseAdmin
       .from("object_import_jobs").select("*").eq("id", data.jobId).maybeSingle();
     if (error) throw new Error(error.message);
@@ -132,7 +132,7 @@ export const listImportJobs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(context);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { getOtservAdmin } = await import("@/lib/dev/tibia/adminClient.server"); const supabaseAdmin = getOtservAdmin();
     const { data, error } = await supabaseAdmin
       .from("object_import_jobs").select("*")
       .order("created_at", { ascending: false }).limit(20);
@@ -146,7 +146,7 @@ export const createOtbUploadUrl = createServerFn({ method: "POST" })
   .inputValidator((raw) => z.object({ filename: z.string().min(1) }).parse(raw))
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { getOtservAdmin } = await import("@/lib/dev/tibia/adminClient.server"); const supabaseAdmin = getOtservAdmin();
     const stamp = Date.now();
     const path = `imports/otb/${stamp}-${data.filename}`;
     const { data: signed, error } = await supabaseAdmin

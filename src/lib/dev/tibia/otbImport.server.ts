@@ -1,6 +1,7 @@
 // Server-only OTB import: parses items.otb from storage and upserts
 // otserv_items.client_id (and inserts stub rows for unknown server_ids).
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { getOtservAdmin } from "@/lib/dev/tibia/adminClient.server";
+const supabaseAdmin = new Proxy({} as ReturnType<typeof getOtservAdmin>, { get: (_t, p) => (getOtservAdmin() as any)[p] });
 import { parseOtb, type OtbItem } from "@/lib/dev/tibia/otbReader";
 
 const BUCKET = "game-sprites";
