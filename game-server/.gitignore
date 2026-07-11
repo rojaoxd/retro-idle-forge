@@ -1,0 +1,8 @@
+node_modules/
+.env
+*.log
+server.log
+data/740/world/Tibia74.otbm
+vendor-client-reference/data/740/Tibia.dat
+vendor-client-reference/data/740/Tibia.spr
+vendor-client-reference/sounds/
