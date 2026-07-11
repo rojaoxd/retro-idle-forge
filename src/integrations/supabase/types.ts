@@ -1828,6 +1828,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      otserv_temp_import_ok: { Args: never; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
