@@ -18,9 +18,14 @@ const { createRemoteJWKSet, jwtVerify } = require("jose");
 
 const AuthService = function() {
 
-  const jwksUrl = process.env[CONFIG.SUPABASE.JWKS_URL_ENV];
+  const explicitJwksUrl = process.env[CONFIG.SUPABASE.JWKS_URL_ENV];
+  const supabaseUrl = process.env[CONFIG.SUPABASE.URL_ENV];
+  const jwksUrl = explicitJwksUrl || (supabaseUrl ? supabaseUrl.replace(/\/$/, "") + "/auth/v1/.well-known/jwks.json" : null);
+
   if(!jwksUrl) {
-    throw new Error("Missing env " + CONFIG.SUPABASE.JWKS_URL_ENV);
+    throw new Error(
+      "Missing env " + CONFIG.SUPABASE.JWKS_URL_ENV + " or " + CONFIG.SUPABASE.URL_ENV
+    );
   }
 
   this.jwks = createRemoteJWKSet(new URL(jwksUrl));
