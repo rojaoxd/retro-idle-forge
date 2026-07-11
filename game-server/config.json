@@ -1,6 +1,9 @@
 {
-  "HMAC": {
-    "SHARED_SECRET": "0000000000000000000000000000000000000000000000000000000000000000"
+  "SUPABASE": {
+    "URL_ENV": "SUPABASE_URL",
+    "SERVICE_ROLE_KEY_ENV": "SUPABASE_SERVICE_ROLE_KEY",
+    "JWKS_URL_ENV": "SUPABASE_JWKS_URL",
+    "SAVE_INTERVAL_MS": 30000
   },
   "LOGIN": {
     "PORT": 1337,
@@ -19,13 +22,8 @@
     "FILEPATH": "server.log"
   },
   "DATABASE": {
-    "ACCOUNT_DATABASE": "accounts.db",
     "DEFAULT_CHARACTER": {
-      "ENABLED": true,
-      "ACCOUNT": "111111",
-      "PASSWORD": "tibia",
-      "SEX": "male",
-      "NAME": "God"
+      "ENABLED": false
     }
   },
   "SERVER": {
@@ -36,12 +34,12 @@
     },
     "ON_ALREADY_ONLINE": "replace",
     "EXTERNAL_HOST": "ws://127.0.0.1:2222",
-    "VERSION": "0.0.0",
+    "VERSION": "0.2.0",
     "CLIENT_VERSION": "740",
-    "DATE": "2022-03-24",
+    "DATE": "2026-07-11",
     "PORT": 2222,
-    "HOST": "127.0.0.1",
-    "ALLOW_MAXIMUM_CONNECTIONS": 50,
+    "HOST": "0.0.0.0",
+    "ALLOW_MAXIMUM_CONNECTIONS": 500,
     "MS_TICK_INTERVAL": 50,
     "MS_SHUTDOWN_SCHEDULE": 1000,
     "MAX_PACKET_SIZE": 1024
@@ -63,10 +61,10 @@
       "START": "08:00"
     },
     "SPAWNS": {
-      "ENABLED": false
+      "ENABLED": true
     },
     "NPCS": {
-      "ENABLED": false
+      "ENABLED": true
     }
   }
 }
