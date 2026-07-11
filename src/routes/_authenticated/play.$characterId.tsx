@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { getCharacter } from "@/lib/game/characters.functions";
 
 export const Route = createFileRoute("/_authenticated/play/$characterId")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Entrar no mundo — Retro Idle Forge" },
@@ -14,43 +14,58 @@ export const Route = createFileRoute("/_authenticated/play/$characterId")({
   component: PlayPage,
 });
 
-/**
- * Placeholder da tela de entrada no jogo.
- *
- * Nesta fase (pós-reset), o engine Tibia74 está sendo integrado no `game-server/`
- * e o cliente Canvas 2D ainda não foi portado — as próximas fases (§4 do plano)
- * substituem este placeholder pela conexão WebSocket binária com o engine.
- */
 function PlayPage() {
   const { characterId } = Route.useParams();
   const navigate = useNavigate();
-  const getChar = useServerFn(getCharacter);
-  const [name, setName] = useState<string | null>(null);
+  const [src, setSrc] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    getChar({ data: { id: characterId } })
-      .then((c) => setName((c as { name: string }).name))
-      .catch((e) => setErr(e instanceof Error ? e.message : "Erro"));
-  }, [characterId, getChar]);
+    const host = (import.meta.env.VITE_GAME_WS_URL as string | undefined) ?? "";
+    const assets = (import.meta.env.VITE_GAME_ASSETS_URL as string | undefined) ?? "";
+    if (!host) {
+      setErr("VITE_GAME_WS_URL não configurado. Aponte para o host:porta do game-server (ex.: game.example.com:1337).");
+      return;
+    }
+    supabase.auth.getSession().then(({ data }) => {
+      const token = data.session?.access_token;
+      if (!token) {
+        setErr("Sessão expirada. Faça login novamente.");
+        return;
+      }
+      const hash = new URLSearchParams({ token, cid: characterId, host, ...(assets ? { assets } : {}) }).toString();
+      setSrc(`/client/index.html#${hash}`);
+    });
+  }, [characterId]);
+
+  if (err) {
+    return (
+      <div className="min-h-screen bg-neutral-950 text-white flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-lg space-y-6 text-center">
+          <h1 className="text-2xl font-semibold">Não foi possível entrar</h1>
+          <p className="text-sm text-red-400">{err}</p>
+          <Button variant="outline" onClick={() => navigate({ to: "/characters" })}>Voltar</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!src) {
+    return (
+      <div className="min-h-screen bg-neutral-950 text-white grid place-items-center">
+        <div className="text-sm text-white/60">Carregando cliente…</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-lg space-y-6 text-center">
-        <h1 className="text-2xl font-semibold">{name ?? "Carregando…"}</h1>
-        <div className="rounded border border-white/10 bg-white/5 p-6 text-sm text-white/70 space-y-3">
-          <p className="text-amber-300">🚧 Cliente do engine em migração</p>
-          <p>
-            O servidor está sendo reconstruído em cima do engine <b>Tibia74-JS-Engine</b>.
-            Assim que o cliente Canvas 2D estiver portado, esta tela vai conectar
-            direto ao WebSocket do servidor AWS.
-          </p>
-          {err && <p className="text-red-400">{err}</p>}
-        </div>
-        <Button variant="outline" onClick={() => navigate({ to: "/characters" })}>
-          Voltar
-        </Button>
-      </div>
+    <div className="fixed inset-0 bg-black">
+      <iframe
+        title="Retro Idle Forge — Cliente"
+        src={src}
+        className="h-full w-full border-0"
+        allow="autoplay; fullscreen"
+      />
     </div>
   );
 }
