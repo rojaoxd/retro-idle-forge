@@ -139,3 +139,29 @@ export const listImportJobs = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return { jobs: data ?? [] };
   });
+
+/** Issue a signed upload URL for a standalone items.otb import. */
+export const createOtbUploadUrl = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((raw) => z.object({ filename: z.string().min(1) }).parse(raw))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const stamp = Date.now();
+    const path = `imports/otb/${stamp}-${data.filename}`;
+    const { data: signed, error } = await supabaseAdmin
+      .storage.from(BUCKET).createSignedUploadUrl(path);
+    if (error) throw new Error(error.message);
+    return { path, token: signed!.token };
+  });
+
+/** Parse a previously uploaded items.otb and sync server_id -> client_id. */
+export const importOtbFile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((raw) => z.object({ otbPath: z.string().min(1) }).parse(raw))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const { runOtbImport } = await import("@/lib/dev/tibia/otbImport.server");
+    return runOtbImport(data.otbPath);
+  });
+
