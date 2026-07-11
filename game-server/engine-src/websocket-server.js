@@ -24,7 +24,8 @@ const WebsocketServer = function() {
   });
 
   // Reference the database
-  this.accountDatabase = new AccountDatabase(CONFIG.DATABASE.ACCOUNT_DATABASE);
+  // AccountDatabase agora é o adapter Supabase (não usa mais CONFIG.DATABASE.ACCOUNT_DATABASE)
+  this.accountDatabase = new AccountDatabase();
 
   // The handler for sockets
   this.socketHandler = new WebsocketSocketHandler();
@@ -101,15 +102,19 @@ WebsocketServer.prototype.__handleClose = function() {
 
 }
 
-WebsocketServer.prototype.__handleConnection = function(socket, request, accountName) {
+WebsocketServer.prototype.__handleConnection = function(socket, request, session) {
 
   /*
    * Function WebsocketServer.__handleConnection
-   * Handles an incoming websocket connection that was upgraded from HTTP with a valid token
+   * Handles an incoming websocket connection that was upgraded from HTTP with a valid JWT.
+   * `session` = { userId, characterId, email } vindo do AuthService.
    */
 
   // Create a new class that wraps the connected socket
-  let gameSocket = new GameSocket(socket, accountName);
+  let gameSocket = new GameSocket(socket, session.characterId);
+  gameSocket.session = session;
+  gameSocket.characterId = session.characterId;
+  gameSocket.userId = session.userId;
 
   // The server is full
   if(this.socketHandler.isOverpopulated()) {
@@ -122,11 +127,11 @@ WebsocketServer.prototype.__handleConnection = function(socket, request, account
   }
 
   // The socket can be accepted
-  this.__acceptConnection(gameSocket, accountName);
+  this.__acceptConnection(gameSocket, session);
 
 }
 
-WebsocketServer.prototype.__acceptConnection = function(gameSocket, accountName) {
+WebsocketServer.prototype.__acceptConnection = function(gameSocket, session) {
 
   /*
    * Function WebsocketServer.__acceptConnection
@@ -136,27 +141,28 @@ WebsocketServer.prototype.__acceptConnection = function(gameSocket, accountName)
   // Get the socket address
   let { address, family, port } = gameSocket.getAddress();
 
-  console.log("A client joined the server: %s.".format(address));
+  console.log("A client joined the server: %s (character %s).".format(address, session.characterId));
 
   // Attach the socket listeners for socket closure
   gameSocket.socket.on("close", this.__handleSocketClose.bind(this, gameSocket));
 
   // Try logging in to a character
-  this.__handleLoginRequest(gameSocket, accountName);
+  this.__handleLoginRequest(gameSocket, session);
 
 }
 
-WebsocketServer.prototype.__handleLoginRequest = function(gameSocket, accountName) {
+WebsocketServer.prototype.__handleLoginRequest = function(gameSocket, session) {
 
   /*
    * Function WebsocketServer.__handleLoginRequest
-   * Handles a login request from a socket
+   * Handles a login request from a socket. Carrega o personagem do Supabase.
    */
 
-  this.accountDatabase.getCharacter(accountName, function getPlayerAccount(error, result) {
+  this.accountDatabase.getCharacter(session, function getPlayerAccount(error, result) {
 
     // There was an error getting the player account
     if(error) {
+      console.warn("Falha ao carregar personagem %s: %s", session.characterId, error.message);
       return gameSocket.terminate();
     }
 
