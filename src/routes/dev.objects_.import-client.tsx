@@ -1,282 +1,255 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronLeft, Upload, Play, AlertTriangle } from "lucide-react";
-import { SprReader } from "@/lib/dev/tibia/sprReader";
-import { parseDat, type DatParseResult, type ThingType, type DatFlags } from "@/lib/dev/tibia/datReader";
-import { importTibiaBatch } from "@/lib/dev/objects.functions";
+import { Input } from "@/components/ui/input";
+import { ChevronLeft, Play, Pause, X, Upload, RotateCw } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  createImportUploadUrls,
+  createImportJob,
+  processImportBatch,
+  controlImportJob,
+  getImportJob,
+  listImportJobs,
+} from "@/lib/dev/tibia/import.functions";
 
 export const Route = createFileRoute("/dev/objects_/import-client")({ component: Page });
 
-/* Convert a ThingType's spriteIds + SprReader into: dedup tile list + composition cells */
-type Tile = { hash: string; base64Png: string };
-type CellDto = {
-  tile_hash: string; layer: number;
-  pattern_x: number; pattern_y: number; pattern_z: number;
-  frame: number; cell_x: number; cell_y: number;
+type JobRow = {
+  id: string;
+  status: "pending" | "running" | "paused" | "completed" | "failed";
+  dat_path: string;
+  spr_path: string;
+  otb_path: string | null;
+  categories: any;
+  total: number;
+  cursor: number;
+  sprites_uploaded: number;
+  objects_inserted: number;
+  objects_updated: number;
+  objects_skipped: number;
+  error: string | null;
+  created_at: string;
 };
 
-async function sha1Hex(bytes: Uint8Array) {
-  const digest = await crypto.subtle.digest(
-    "SHA-1",
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
-  );
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-function bytesToBase64(bytes: Uint8Array) {
-  let bin = ""; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin);
-}
-async function rgbaToPng(rgba: Uint8Array): Promise<Uint8Array> {
-  const canvas = document.createElement("canvas");
-  canvas.width = 32; canvas.height = 32;
-  const ctx = canvas.getContext("2d")!;
-  ctx.putImageData(new ImageData(new Uint8ClampedArray(rgba), 32, 32), 0, 0);
-  const blob: Blob = await new Promise((res, rej) =>
-    canvas.toBlob((b) => (b ? res(b) : rej(new Error("toBlob failed"))), "image/png"),
-  );
-  return new Uint8Array(await blob.arrayBuffer());
-}
-
-/* Map dat flags → schema flags + object_kind */
-function classifyThing(t: ThingType): { object_kind: any; extraFlags: Record<string, any> } {
-  const f = t.flags;
-  let kind: string = "item";
-  if (t.category === "outfit") kind = "creature";
-  else if (t.category === "effect") kind = "effect";
-  else if (t.category === "missile") kind = "effect";
-  else if (f.isGround) kind = "ground";
-  else if (f.isContainer) kind = "container";
-  else if (f.isFluidContainer || f.isFluid) kind = "fluid";
-  else if (f.isOnTop) kind = "wall";
-  const extra: Record<string, any> = {};
-  if (f.isUnpassable) extra.isSolid = true;
-  if (f.blockMissile) extra.isBlockProjectile = true;
-  if (f.blockPathfind) extra.isBlockPath = true;
-  if (f.isContainer) extra.isContainer = true;
-  if (f.isStackable) extra.isStackable = true;
-  if (f.isMultiUse) extra.isUseable = true;
-  if (f.isForceUse) extra.isForceUse = true;
-  if (f.isPickupable) extra.isPickupable = true;
-  if (f.isHangable) extra.isHangable = true;
-  if (f.isRotatable) extra.isRotatable = true;
-  if (f.isFullGround) extra.isFullGround = true;
-  if (f.isOnTop) extra.isTop = true;
-  if (f.isOnBottom) extra.isBottom = true;
-  if (f.hasElevation) { extra.hasHeight = true; extra.elevation = f.elevation ?? 8; }
-  if (f.hasOffset) extra.hasOffset = true;
-  if (f.hasLight) { extra.hasLight = true; extra.lightLevel = f.lightLevel; extra.lightColor = f.lightColor; }
-  if (f.isLyingObject) extra.isLyingCorpse = true;
-  if (f.isAnimateAlways) extra.isAnimateAlways = true;
-  if (f.hasMiniMap) extra.miniMapColor = f.miniMapColor;
-  if (f.isGround && f.groundSpeed != null) extra.groundSpeed = f.groundSpeed;
-  if (t.category === "missile") extra.isMissile = true;
-  return { object_kind: kind, extraFlags: extra };
-}
-
-async function buildBatchObject(
-  t: ThingType,
-  spr: SprReader,
-  cache: Map<number, Tile>, // sprite id → tile (dedupe across batch)
-): Promise<{
-  object: any; cells: CellDto[]; newTiles: Tile[];
-} | null> {
-  const totalPZ = 1;
-  const total = t.width * t.height * t.layers * t.patternX * t.patternY * totalPZ * t.frames;
-  if (total === 0 || t.spriteIds.length === 0) return null;
-
-  const newTiles: Tile[] = [];
-  const cells: CellDto[] = [];
-  let idx = 0;
-  for (let f = 0; f < t.frames; f++) {
-    for (let pz = 0; pz < totalPZ; pz++) {
-      for (let py = 0; py < t.patternY; py++) {
-        for (let px = 0; px < t.patternX; px++) {
-          for (let l = 0; l < t.layers; l++) {
-            for (let cy = 0; cy < t.height; cy++) {
-              for (let cx = 0; cx < t.width; cx++) {
-                const spriteId = t.spriteIds[idx++];
-                if (!spriteId) continue;
-                let tile = cache.get(spriteId);
-                if (!tile) {
-                  const rgba = spr.getSprite(spriteId);
-                  if (!rgba) continue;
-                  const png = await rgbaToPng(rgba);
-                  const hash = await sha1Hex(png);
-                  tile = { hash, base64Png: bytesToBase64(png) };
-                  cache.set(spriteId, tile);
-                  newTiles.push(tile);
-                }
-                cells.push({
-                  tile_hash: tile.hash, layer: l,
-                  pattern_x: px, pattern_y: py, pattern_z: pz,
-                  frame: f, cell_x: cx, cell_y: cy,
-                });
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  const { object_kind, extraFlags } = classifyThing(t);
-  const name =
-    t.category === "outfit" ? `outfit_${t.id}` :
-    t.category === "effect" ? `effect_${t.id}` :
-    t.category === "missile" ? `missile_${t.id}` :
-    `item_${t.id}`;
-
-  return {
-    object: {
-      name,
-      object_kind,
-      client_id: t.id,
-      width: t.width, height: t.height, layers: t.layers,
-      pattern_x: t.patternX, pattern_y: t.patternY, pattern_z: totalPZ,
-      frames: t.frames, frame_duration_ms: 500,
-      flags: extraFlags,
-      cells,
-    },
-    cells,
-    newTiles,
-  };
-}
+const BUCKET = "game-sprites";
 
 function Page() {
-  const importFn = useServerFn(importTibiaBatch);
-  const [dat, setDat] = useState<DatParseResult | null>(null);
-  const [spr, setSpr] = useState<SprReader | null>(null);
-  const [datName, setDatName] = useState(""); const [sprName, setSprName] = useState("");
+  const uploadUrlsFn = useServerFn(createImportUploadUrls);
+  const createJobFn = useServerFn(createImportJob);
+  const processFn = useServerFn(processImportBatch);
+  const controlFn = useServerFn(controlImportJob);
+  const getJobFn = useServerFn(getImportJob);
+  const listJobsFn = useServerFn(listImportJobs);
+
+  const [jobs, setJobs] = useState<JobRow[]>([]);
+  const [activeJob, setActiveJob] = useState<JobRow | null>(null);
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number; log: string[] }>({ done: 0, total: 0, log: [] });
-  const cancelRef = useRef(false);
-
-  // filters
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
+  const [batchSize, setBatchSize] = useState(20);
   const [cats, setCats] = useState({ item: true, outfit: true, effect: true, missile: true });
-  const [idMin, setIdMin] = useState(""); const [idMax, setIdMax] = useState("");
-  const [dryRun, setDryRun] = useState(true);
-  const [batchSize, setBatchSize] = useState(50);
+  const [datFile, setDatFile] = useState<File | null>(null);
+  const [sprFile, setSprFile] = useState<File | null>(null);
+  const [otbFile, setOtbFile] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const pollRef = useRef<number | null>(null);
+  const runningRef = useRef(false);
 
-  async function pickDat(f: File) {
-    setDatName(f.name); setBusy(true);
-    try { setDat(parseDat(await f.arrayBuffer())); }
-    finally { setBusy(false); }
-  }
-  async function pickSpr(f: File) {
-    setSprName(f.name); setBusy(true);
-    try { setSpr(new SprReader(await f.arrayBuffer())); }
-    finally { setBusy(false); }
-  }
+  const refreshList = useCallback(async () => {
+    const { jobs } = await listJobsFn();
+    setJobs(jobs as JobRow[]);
+    // Auto-adopt an in-progress job
+    const inProg = (jobs as JobRow[]).find(
+      (j) => j.status === "running" || j.status === "pending" || j.status === "paused",
+    );
+    if (inProg) setActiveJob(inProg);
+  }, [listJobsFn]);
 
-  const filtered = useMemo(() => {
-    if (!dat) return [] as ThingType[];
-    const out: ThingType[] = [];
-    if (cats.item) out.push(...dat.items);
-    if (cats.outfit) out.push(...dat.outfits);
-    if (cats.effect) out.push(...dat.effects);
-    if (cats.missile) out.push(...dat.missiles);
-    const mn = idMin ? Number(idMin) : -Infinity;
-    const mx = idMax ? Number(idMax) : Infinity;
-    return out.filter((t) => t.id >= mn && t.id <= mx);
-  }, [dat, cats, idMin, idMax]);
+  useEffect(() => { refreshList(); }, [refreshList]);
 
-  async function run() {
-    if (!dat || !spr || !filtered.length) return;
-    setBusy(true); cancelRef.current = false;
-    setProgress({ done: 0, total: filtered.length, log: [] });
-    const cache = new Map<number, Tile>();
+  // ---- polling loop --------------------------------------------------------
+  const stopPolling = useCallback(() => {
+    runningRef.current = false;
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
 
-    for (let i = 0; i < filtered.length; i += batchSize) {
-      if (cancelRef.current) break;
-      const slice = filtered.slice(i, i + batchSize);
-      const built: any[] = []; const newSprites: Tile[] = [];
-      for (const t of slice) {
-        const b = await buildBatchObject(t, spr, cache);
-        if (b) {
-          built.push(b.object);
-          for (const nt of b.newTiles) newSprites.push(nt);
+  const startPolling = useCallback((jobId: string) => {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    const tick = async () => {
+      try {
+        const res = await processFn({ data: { jobId, batchSize } });
+        // refresh authoritative row
+        const { job } = await getJobFn({ data: { jobId } });
+        if (job) setActiveJob(job as JobRow);
+        if (res.status === "completed" || (job && (job.status === "paused" || job.status === "failed" || job.status === "completed"))) {
+          stopPolling();
+          await refreshList();
         }
+      } catch (e: any) {
+        setError(e.message);
+        stopPolling();
+        await refreshList();
       }
+    };
+    // fire immediately then interval
+    tick();
+    pollRef.current = window.setInterval(tick, 1200);
+  }, [processFn, getJobFn, batchSize, refreshList, stopPolling]);
 
-      if (dryRun) {
-        setProgress((p) => ({
-          done: Math.min(i + slice.length, filtered.length),
-          total: filtered.length,
-          log: [...p.log, `[dry-run] batch ${i / batchSize + 1}: ${built.length} objetos, ${newSprites.length} sprites novos`],
-        }));
-      } else {
-        try {
-          const res = await importFn({
-            data: { sprites: newSprites, objects: built as any, tagPrefix: "tibia74" },
-          });
-          setProgress((p) => ({
-            done: Math.min(i + slice.length, filtered.length),
-            total: filtered.length,
-            log: [...p.log, `batch ${i / batchSize + 1}: +${res.inserted} novos, ${res.updated} atualizados, ${res.skipped} pulados`],
-          }));
-        } catch (e: any) {
-          setProgress((p) => ({
-            ...p, done: Math.min(i + slice.length, filtered.length),
-            log: [...p.log, `batch ${i / batchSize + 1}: ERRO ${e.message}`],
-          }));
-        }
-      }
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
+  // Auto-resume a running job on mount
+  useEffect(() => {
+    if (activeJob && activeJob.status === "running" && !runningRef.current) {
+      startPolling(activeJob.id);
     }
+  }, [activeJob, startPolling]);
 
-    setBusy(false);
+  // ---- actions -------------------------------------------------------------
+  async function uploadToSigned(path: string, token: string, file: File) {
+    const { error } = await supabase.storage.from(BUCKET).uploadToSignedUrl(path, token, file, {
+      contentType: file.name.endsWith(".dat") ? "application/octet-stream" : "application/octet-stream",
+      upsert: true,
+    });
+    if (error) throw new Error(`upload ${file.name}: ${error.message}`);
   }
 
-  const summary = dat && (
-    <div className="grid grid-cols-4 gap-2 text-xs dev-inset p-3">
-      <div>Items: <b>{dat.items.length}</b>/{dat.itemsCount}</div>
-      <div>Outfits: <b>{dat.outfits.length}</b>/{dat.outfitsCount}</div>
-      <div>Effects: <b>{dat.effects.length}</b>/{dat.effectsCount}</div>
-      <div>Missiles: <b>{dat.missiles.length}</b>/{dat.missilesCount}</div>
-      {dat.truncated && (
-        <div className="col-span-4 mt-1 flex items-start gap-2 text-yellow-400">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-          <div>Arquivo terminou antes do declarado no header. Warnings: {dat.warnings.slice(0, 3).join("; ")}</div>
-        </div>
-      )}
-    </div>
-  );
+  async function startNewImport() {
+    setError(null);
+    if (!datFile || !sprFile) { setError("Selecione Tibia.dat e Tibia.spr"); return; }
+    setBusy(true);
+    setUploadPct(0);
+    try {
+      const urls = await uploadUrlsFn({ data: {
+        datFilename: datFile.name,
+        sprFilename: sprFile.name,
+        otbFilename: otbFile?.name,
+      } });
+      setUploadPct(10);
+      await uploadToSigned(urls.dat.path, urls.dat.token, datFile);
+      setUploadPct(30);
+      await uploadToSigned(urls.spr.path, urls.spr.token, sprFile);
+      setUploadPct(70);
+      if (otbFile && urls.otb) await uploadToSigned(urls.otb.path, urls.otb.token, otbFile);
+      setUploadPct(85);
+
+      const { job } = await createJobFn({ data: {
+        jobId: urls.jobId,
+        datPath: urls.dat.path,
+        sprPath: urls.spr.path,
+        otbPath: urls.otb?.path ?? null,
+        categories: cats,
+      } });
+      setUploadPct(100);
+      setActiveJob(job as JobRow);
+      startPolling(urls.jobId);
+      await refreshList();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+      setTimeout(() => setUploadPct(null), 800);
+    }
+  }
+
+  async function control(action: "pause" | "resume" | "cancel") {
+    if (!activeJob) return;
+    try {
+      await controlFn({ data: { jobId: activeJob.id, action } });
+      if (action === "resume") startPolling(activeJob.id);
+      else stopPolling();
+      const { job } = await getJobFn({ data: { jobId: activeJob.id } });
+      setActiveJob(job as JobRow);
+      await refreshList();
+    } catch (e: any) { setError(e.message); }
+  }
+
+  function pct(j: JobRow) {
+    if (!j.total) return 0;
+    return Math.round((j.cursor / j.total) * 100);
+  }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Link to="/dev/objects" className="rounded p-1 hover:bg-slate-800">
           <ChevronLeft className="h-4 w-4" />
         </Link>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-slate-100">Importar cliente Tibia 7.4</h1>
-          <p className="text-xs text-slate-400">Carrega <code>Tibia.dat</code> + <code>Tibia.spr</code> e popula o banco automaticamente</p>
+          <p className="text-xs text-slate-400">
+            Upload &rarr; job persistido no banco. Fecha a aba, volta depois, ele retoma do último objeto.
+          </p>
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="dev-panel p-3">
-          <label className="mb-1 block text-[10px] uppercase text-slate-400">Tibia.dat</label>
-          <input type="file" accept=".dat" onChange={(e) => e.target.files?.[0] && pickDat(e.target.files[0])} />
-          {datName && <div className="mt-1 text-xs text-slate-500">{datName}</div>}
+      {error && (
+        <div className="dev-panel border-red-500/40 bg-red-500/5 p-3 text-sm text-red-300">
+          {error}
         </div>
-        <div className="dev-panel p-3">
-          <label className="mb-1 block text-[10px] uppercase text-slate-400">Tibia.spr</label>
-          <input type="file" accept=".spr" onChange={(e) => e.target.files?.[0] && pickSpr(e.target.files[0])} />
-          {sprName && <div className="mt-1 text-xs text-slate-500">{sprName} · {spr?.count ?? 0} sprites</div>}
-        </div>
-      </div>
+      )}
 
-      {summary}
-
-      {dat && spr && (
+      {/* Active job panel */}
+      {activeJob && activeJob.status !== "completed" && (
         <div className="dev-panel space-y-3 p-3">
-          <div className="flex flex-wrap gap-4">
+          <div className="flex items-center gap-2">
+            <div className="text-xs uppercase text-slate-400">Job atual</div>
+            <code className="text-[10px] text-slate-500">{activeJob.id.slice(0, 8)}</code>
+            <span className={`ml-auto rounded px-2 py-0.5 text-[10px] uppercase ${
+              activeJob.status === "running" ? "bg-emerald-500/20 text-emerald-300" :
+              activeJob.status === "paused" ? "bg-amber-500/20 text-amber-300" :
+              activeJob.status === "failed" ? "bg-red-500/20 text-red-300" :
+              "bg-slate-500/20 text-slate-300"
+            }`}>{activeJob.status}</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded bg-slate-800">
+            <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct(activeJob)}%` }} />
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+            <div>Progresso: <b>{activeJob.cursor}/{activeJob.total}</b> ({pct(activeJob)}%)</div>
+            <div>Inseridos: <b>{activeJob.objects_inserted}</b></div>
+            <div>Atualizados: <b>{activeJob.objects_updated}</b></div>
+            <div>Pulados: <b>{activeJob.objects_skipped}</b></div>
+            <div>Sprites novos: <b>{activeJob.sprites_uploaded}</b></div>
+          </div>
+          {activeJob.error && (
+            <div className="dev-inset p-2 text-xs text-red-300">Erro: {activeJob.error}</div>
+          )}
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] uppercase text-slate-400">Batch</label>
+            <Input type="number" className="w-20" value={batchSize}
+              onChange={(e) => setBatchSize(Math.max(1, Math.min(100, Number(e.target.value) || 20)))} />
+            <div className="flex-1" />
+            {activeJob.status === "running" ? (
+              <Button size="sm" variant="outline" onClick={() => control("pause")}>
+                <Pause className="mr-1 h-4 w-4" /> Pausar
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => control("resume")}
+                style={{ background: "var(--dev-accent)", color: "#052e2b" }}>
+                <Play className="mr-1 h-4 w-4" /> Retomar
+              </Button>
+            )}
+            <Button size="sm" variant="destructive" onClick={() => control("cancel")}>
+              <X className="mr-1 h-4 w-4" /> Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* New import */}
+      {(!activeJob || activeJob.status === "completed") && (
+        <div className="dev-panel space-y-3 p-3">
+          <div className="text-xs uppercase text-slate-400">Novo import</div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <FileInput label="Tibia.dat" file={datFile} onFile={setDatFile} accept=".dat" />
+            <FileInput label="Tibia.spr" file={sprFile} onFile={setSprFile} accept=".spr" />
+            <FileInput label="items.otb (opcional)" file={otbFile} onFile={setOtbFile} accept=".otb" />
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
             {(["item", "outfit", "effect", "missile"] as const).map((k) => (
               <label key={k} className="flex items-center gap-2 text-sm">
                 <Checkbox checked={cats[k]} onCheckedChange={(v) => setCats({ ...cats, [k]: !!v })} />
@@ -284,49 +257,68 @@ function Page() {
               </label>
             ))}
             <div className="flex items-center gap-2">
-              <label className="text-[10px] uppercase text-slate-400">ID min</label>
-              <Input className="w-24" value={idMin} onChange={(e) => setIdMin(e.target.value)} />
-              <label className="text-[10px] uppercase text-slate-400">ID max</label>
-              <Input className="w-24" value={idMax} onChange={(e) => setIdMax(e.target.value)} />
-            </div>
-            <div className="flex items-center gap-2">
               <label className="text-[10px] uppercase text-slate-400">Batch</label>
-              <Input type="number" className="w-20" value={batchSize} onChange={(e) => setBatchSize(Math.max(1, Number(e.target.value) || 50))} />
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox checked={dryRun} onCheckedChange={(v) => setDryRun(!!v)} />
-              Dry-run (só simula)
-            </label>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="text-xs text-slate-400">
-              Selecionados: <b className="text-slate-100">{filtered.length}</b> · IDs {filtered[0]?.id ?? "—"} → {filtered[filtered.length - 1]?.id ?? "—"}
+              <Input type="number" className="w-20" value={batchSize}
+                onChange={(e) => setBatchSize(Math.max(1, Math.min(100, Number(e.target.value) || 20)))} />
             </div>
             <div className="flex-1" />
-            {busy ? (
-              <Button size="sm" variant="destructive" onClick={() => { cancelRef.current = true; }}>Cancelar</Button>
-            ) : (
-              <Button size="sm" onClick={run} disabled={!filtered.length}
-                style={{ background: "var(--dev-accent)", color: "#052e2b" }}>
-                <Play className="mr-1 h-4 w-4" />
-                {dryRun ? "Simular" : "Importar"}
-              </Button>
-            )}
+            <Button size="sm" onClick={startNewImport} disabled={busy || !datFile || !sprFile}
+              style={{ background: "var(--dev-accent)", color: "#052e2b" }}>
+              <Upload className="mr-1 h-4 w-4" /> {busy ? "Enviando…" : "Iniciar import"}
+            </Button>
           </div>
-
-          {progress.total > 0 && (
-            <div className="space-y-2">
-              <div className="h-2 w-full overflow-hidden rounded bg-slate-800">
-                <div className="h-full bg-emerald-500 transition-all"
-                  style={{ width: `${(progress.done / progress.total) * 100}%` }} />
-              </div>
-              <div className="text-xs text-slate-400">{progress.done}/{progress.total}</div>
-              <div className="dev-inset max-h-64 overflow-auto p-2 font-mono text-[10px]">
-                {progress.log.map((l, i) => <div key={i}>{l}</div>)}
-              </div>
+          {uploadPct !== null && (
+            <div className="h-2 w-full overflow-hidden rounded bg-slate-800">
+              <div className="h-full bg-sky-500 transition-all" style={{ width: `${uploadPct}%` }} />
             </div>
           )}
+        </div>
+      )}
+
+      {/* Job history */}
+      <div className="dev-panel p-3">
+        <div className="mb-2 flex items-center gap-2">
+          <div className="text-xs uppercase text-slate-400">Jobs recentes</div>
+          <div className="flex-1" />
+          <Button size="sm" variant="outline" onClick={refreshList}>
+            <RotateCw className="mr-1 h-3 w-3" /> Atualizar
+          </Button>
+        </div>
+        <div className="space-y-1 text-xs">
+          {jobs.length === 0 && <div className="text-slate-500">Nenhum job ainda.</div>}
+          {jobs.map((j) => (
+            <button key={j.id} onClick={() => setActiveJob(j)}
+              className="flex w-full items-center gap-3 rounded px-2 py-1 text-left hover:bg-slate-800">
+              <code className="text-slate-500">{j.id.slice(0, 8)}</code>
+              <span className={`rounded px-1.5 py-0.5 text-[10px] uppercase ${
+                j.status === "completed" ? "bg-emerald-500/20 text-emerald-300" :
+                j.status === "running" ? "bg-sky-500/20 text-sky-300" :
+                j.status === "paused" ? "bg-amber-500/20 text-amber-300" :
+                j.status === "failed" ? "bg-red-500/20 text-red-300" :
+                "bg-slate-500/20 text-slate-300"
+              }`}>{j.status}</span>
+              <span className="text-slate-400">{j.cursor}/{j.total}</span>
+              <span className="text-slate-500">+{j.objects_inserted} / ~{j.objects_updated}</span>
+              <span className="ml-auto text-slate-600">{new Date(j.created_at).toLocaleString()}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FileInput({
+  label, file, onFile, accept,
+}: { label: string; file: File | null; onFile: (f: File | null) => void; accept: string }) {
+  return (
+    <div className="dev-inset p-3">
+      <label className="mb-1 block text-[10px] uppercase text-slate-400">{label}</label>
+      <input type="file" accept={accept}
+        onChange={(e) => onFile(e.target.files?.[0] ?? null)} />
+      {file && (
+        <div className="mt-1 text-xs text-slate-500">
+          {file.name} · {(file.size / 1024 / 1024).toFixed(2)} MB
         </div>
       )}
     </div>
