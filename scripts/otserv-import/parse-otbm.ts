@@ -220,10 +220,7 @@ function main() {
         // walk item children
         walkChildren(buf, tileSpan.childrenStart, tileSpan.nodeEnd, (itemBufPos, itemSpan) => {
           if (itemSpan.type !== OTBM_ITEM) return;
-          const mini = new Reader(buf);
-          mini.pos = itemBufPos + 1;
-          const item = readItem(mini, itemSpan);
-          row.items.push(item);
+          row.items.push(readItemAt(buf, itemBufPos + 1, itemSpan));
         });
         process.stdout.write(JSON.stringify(row) + "\n");
         tileCount++;
