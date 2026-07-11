@@ -1,0 +1,1 @@
+GRANT INSERT ON public.otserv_items TO anon;
