@@ -2,6 +2,8 @@
 
 const http = require("http");
 const url = require("url");
+const fs = require("fs");
+const path = require("path");
 
 const AuthService = requireModule("auth-service");
 const BandwidthHandler = requireModule("bandwidth-handler");
@@ -133,14 +135,52 @@ HTTPServer.prototype.__handleRequest = function(request, response) {
 
   /*
    * Function HTTPServer.__handleRequest
-   * Handles standard HTTP requests to the game server: we do not accept these and tell the client to upgrade to WS.
+   * Handles standard HTTP requests. Serve static assets em /data/<versão>/*
+   * (Tibia.spr, Tibia.dat, sounds/*) para o cliente hospedado em outro
+   * domínio (Lovable). Requisições em / continuam sendo redirecionadas para
+   * upgrade WS.
    */
+
+  // CORS (cliente pode estar em outra origem)
+  let corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type"
+  };
+
+  if(request.method === "OPTIONS") {
+    response.writeHead(204, corsHeaders);
+    return response.end();
+  }
+
+  let pathname = url.parse(request.url).pathname || "/";
+
+  // Serve /data/<versão>/<arquivo> como estático a partir do disco
+  let dataMatch = pathname.match(/^\/data\/([\w.-]+)\/(.+)$/);
+  if(request.method === "GET" && dataMatch) {
+    let version = dataMatch[1];
+    let rel = dataMatch[2].replace(/\.\./g, "");
+    let filePath = path.join(__dirname, "..", "data", version, rel);
+    return fs.stat(filePath, function(err, stat) {
+      if(err || !stat.isFile()) {
+        response.writeHead(404, corsHeaders);
+        return response.end();
+      }
+      let headers = Object.assign({
+        "Content-Type": "application/octet-stream",
+        "Content-Length": stat.size,
+        "Cache-Control": "public, max-age=86400"
+      }, corsHeaders);
+      response.writeHead(200, headers);
+      fs.createReadStream(filePath).pipe(response);
+    });
+  }
 
   // Validation of request
   let code = this.__validateHTTPRequest(request);
-  
+
   if(code !== null) {
-    return this.__generateRawHTTPResponse(request.socket, code)
+    return this.__generateRawHTTPResponse(request.socket, code);
   }
 
   // We only accept websocket connections: tell the client to upgrade
@@ -165,7 +205,7 @@ HTTPServer.prototype.__validateHTTPRequest = function(request) {
   }
 
   // Only root node
-  if(url.parse(request.url).pathname!== "/") {
+  if(url.parse(request.url).pathname !== "/") {
     return 404;
   }
 
