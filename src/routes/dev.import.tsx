@@ -267,6 +267,12 @@ function ImportPage() {
         </div>
       </Card>
 
+      <WorldTilesCard
+        importBatch={importBatch}
+        push={push}
+      />
+
+
       {tasks.length > 0 && (
         <Card className="p-4 space-y-2">
           <div className="flex justify-between text-sm font-medium">
@@ -327,3 +333,121 @@ function ImportPage() {
     </div>
   );
 }
+
+function WorldTilesCard({
+  importBatch,
+  push,
+}: {
+  importBatch: (arg: { data: { table: any; rows: any[]; dryRun: boolean; replace: boolean } }) => Promise<{ count: number }>;
+  push: (m: string) => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [dryRun, setDryRun] = useState(true);
+  const [batchSize, setBatchSize] = useState(500);
+  const [running, setRunning] = useState(false);
+  const [done, setDone] = useState(0);
+  const [errors, setErrors] = useState(0);
+  const [status, setStatus] = useState<string>("");
+
+  const run = useCallback(async () => {
+    if (!file) return;
+    setRunning(true); setDone(0); setErrors(0);
+    setStatus(`lendo ${file.name} (${(file.size / 1e6).toFixed(1)} MB)...`);
+    const reader = file.stream().getReader();
+    const decoder = new TextDecoder("utf-8");
+    let carry = "";
+    let batch: any[] = [];
+    let total = 0;
+
+    const flush = async () => {
+      if (!batch.length) return;
+      try {
+        const r = await importBatch({ data: { table: "world_tiles", rows: batch, dryRun, replace: false } });
+        total += r.count ?? batch.length;
+        setDone(total);
+      } catch (e: any) {
+        setErrors((n) => n + batch.length);
+        push(`ERRO world_tiles batch: ${e.message}`);
+      }
+      batch = [];
+    };
+
+    try {
+      while (true) {
+        const { value, done: rDone } = await reader.read();
+        if (rDone) break;
+        carry += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = carry.indexOf("\n")) >= 0) {
+          const line = carry.slice(0, nl).trim();
+          carry = carry.slice(nl + 1);
+          if (!line) continue;
+          try {
+            const row = JSON.parse(line);
+            // sanitize: table columns are x,y,z,ground_id,items(JSONB),house_id,tile_flags
+            batch.push({
+              x: row.x, y: row.y, z: row.z,
+              ground_id: row.ground_id ?? null,
+              items: row.items ?? [],
+              house_id: row.house_id ?? null,
+              tile_flags: row.tile_flags ?? null,
+            });
+          } catch {
+            setErrors((n) => n + 1);
+          }
+          if (batch.length >= batchSize) await flush();
+        }
+        setStatus(`processado ${(total).toLocaleString()} tiles...`);
+      }
+      if (carry.trim()) {
+        try { batch.push(JSON.parse(carry)); } catch { setErrors((n) => n + 1); }
+      }
+      await flush();
+      setStatus(`concluído: ${total.toLocaleString()} tiles enviados`);
+      toast.success(dryRun ? "Dry-run mundo OK" : "Mundo importado");
+    } finally {
+      setRunning(false);
+    }
+  }, [file, dryRun, batchSize, importBatch, push]);
+
+  return (
+    <Card className="p-4 space-y-3">
+      <h2 className="font-semibold">Mundo (.otbm → tiles.jsonl)</h2>
+      <p className="text-sm text-muted-foreground">
+        Rode <code>bun scripts/otserv-import/parse-otbm.ts data/world/world.otbm &gt; out/tiles.jsonl</code> localmente e faça upload do <code>tiles.jsonl</code> aqui. Streaming linha-por-linha, memória constante.
+      </p>
+      <div className="flex items-center gap-3">
+        <input
+          type="file"
+          accept=".jsonl,.ndjson,application/x-ndjson"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          disabled={running}
+        />
+        <label className="text-sm flex items-center gap-1">
+          Batch:
+          <input
+            type="number"
+            className="w-20 border rounded px-1"
+            value={batchSize}
+            onChange={(e) => setBatchSize(Math.max(50, Number(e.target.value) || 500))}
+            disabled={running}
+          />
+        </label>
+        <label className="text-sm flex items-center gap-1">
+          <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} disabled={running} />
+          Dry-run
+        </label>
+        <Button onClick={run} disabled={!file || running}>
+          {running ? "Enviando..." : "Importar mundo"}
+        </Button>
+      </div>
+      {(running || done > 0) && (
+        <div className="text-xs text-muted-foreground space-y-1">
+          <div>{status}</div>
+          <div>enviados: {done.toLocaleString()} · erros: {errors}</div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
