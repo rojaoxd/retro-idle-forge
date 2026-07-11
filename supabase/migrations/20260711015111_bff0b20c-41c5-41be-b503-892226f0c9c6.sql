@@ -1,0 +1,1 @@
+ALTER TABLE public.map_tiles ALTER COLUMN tile_id DROP NOT NULL;
