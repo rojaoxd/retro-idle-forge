@@ -695,6 +695,66 @@ export type Database = {
           },
         ]
       }
+      object_import_jobs: {
+        Row: {
+          categories: Json
+          created_at: string
+          created_by: string | null
+          cursor: number
+          dat_path: string
+          error: string | null
+          id: string
+          log: Json
+          objects_inserted: number
+          objects_skipped: number
+          objects_updated: number
+          otb_path: string | null
+          spr_path: string
+          sprites_uploaded: number
+          status: string
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          categories?: Json
+          created_at?: string
+          created_by?: string | null
+          cursor?: number
+          dat_path: string
+          error?: string | null
+          id?: string
+          log?: Json
+          objects_inserted?: number
+          objects_skipped?: number
+          objects_updated?: number
+          otb_path?: string | null
+          spr_path: string
+          sprites_uploaded?: number
+          status?: string
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          categories?: Json
+          created_at?: string
+          created_by?: string | null
+          cursor?: number
+          dat_path?: string
+          error?: string | null
+          id?: string
+          log?: Json
+          objects_inserted?: number
+          objects_skipped?: number
+          objects_updated?: number
+          otb_path?: string | null
+          spr_path?: string
+          sprites_uploaded?: number
+          status?: string
+          total?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       online_players: {
         Row: {
           character_name: string
@@ -841,6 +901,7 @@ export type Database = {
           attack: number | null
           attributes: Json
           charges: number | null
+          client_id: number | null
           created_at: string
           decayto: number | null
           defense: number | null
@@ -871,6 +932,7 @@ export type Database = {
           attack?: number | null
           attributes?: Json
           charges?: number | null
+          client_id?: number | null
           created_at?: string
           decayto?: number | null
           defense?: number | null
@@ -901,6 +963,7 @@ export type Database = {
           attack?: number | null
           attributes?: Json
           charges?: number | null
+          client_id?: number | null
           created_at?: string
           decayto?: number | null
           defense?: number | null
