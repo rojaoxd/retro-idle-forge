@@ -53,7 +53,10 @@ const groups: Group[] = [
   },
   {
     title: "Sistema",
-    items: [{ to: "/dev/config", label: "Config Global", icon: Settings }],
+    items: [
+      { to: "/dev/import", label: "Import OTServ 7.4", icon: Download },
+      { to: "/dev/config", label: "Config Global", icon: Settings },
+    ],
   },
 ];
 
