@@ -314,6 +314,66 @@ function Page() {
   );
 }
 
+function OtbSyncCard() {
+  const createUrlFn = useServerFn(createOtbUploadUrl);
+  const importFn = useServerFn(importOtbFile);
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [result, setResult] = useState<Awaited<ReturnType<typeof importFn>> | null>(null);
+
+  async function run() {
+    if (!file) { setErr("Selecione items.otb"); return; }
+    setBusy(true); setErr(null); setResult(null);
+    try {
+      const { path, token } = await createUrlFn({ data: { filename: file.name } });
+      const up = await supabase.storage.from(BUCKET).uploadToSignedUrl(path, token, file, {
+        contentType: "application/octet-stream", upsert: true,
+      });
+      if (up.error) throw new Error(up.error.message);
+      const res = await importFn({ data: { otbPath: path } });
+      setResult(res);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="dev-panel space-y-3 p-3">
+      <div className="text-xs uppercase text-slate-400">Sincronizar items.otb</div>
+      <p className="text-xs text-slate-500">
+        Faz upload do <code>items.otb</code>, extrai o mapeamento <b>server_id → client_id</b> e
+        atualiza <code>otserv_items</code>. Insere linhas ausentes com um nome placeholder.
+      </p>
+      <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+        <FileInput label="items.otb" file={file} onFile={setFile} accept=".otb" />
+        <div className="flex items-end">
+          <Button size="sm" onClick={run} disabled={busy || !file}
+            style={{ background: "var(--dev-accent)", color: "#052e2b" }}>
+            <Upload className="mr-1 h-4 w-4" /> {busy ? "Processando…" : "Sincronizar"}
+          </Button>
+        </div>
+      </div>
+      {err && <div className="dev-inset p-2 text-xs text-red-300">{err}</div>}
+      {result && (
+        <div className="dev-inset space-y-1 p-2 text-xs">
+          <div>OTB v{result.version.major}.{result.version.minor} build {result.version.build}</div>
+          <div>Itens no arquivo: <b>{result.parsed}</b></div>
+          <div>Atualizados: <b className="text-emerald-300">{result.updated}</b> ·
+            Inseridos: <b className="text-sky-300">{result.inserted}</b> ·
+            Sem mudanças: <b className="text-slate-400">{result.unchanged}</b></div>
+          {result.errors.length > 0 && (
+            <div className="mt-1 text-red-300">Erros ({result.errors.length}): {result.errors[0]}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function FileInput({
   label, file, onFile, accept,
 }: { label: string; file: File | null; onFile: (f: File | null) => void; accept: string }) {
